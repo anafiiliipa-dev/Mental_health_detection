@@ -1,0 +1,13 @@
+streamlit
+streamlit-option-menu
+pandas
+joblib
+python-dotenv
+openai
+
+langchain
+langchain-text-splitters
+langchain-community
+langchain-huggingface
+faiss-cpu
+sentence-transformers

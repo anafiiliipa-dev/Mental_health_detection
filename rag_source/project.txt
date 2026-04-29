@@ -1,0 +1,28 @@
+This project is a mental health NLP triage system.
+
+Its purpose is to support early signal detection from text in a non-diagnostic way.
+
+The system classifies text into multiple mental health-related categories, including:
+- ADHD
+- Anxiety
+- Autism
+- Bipolar
+- BPD
+- Depression
+- Schizophrenia
+
+The project is designed as a decision-support and triage assistant, not as a diagnostic tool.
+
+Its main value is to help prioritize potentially high-risk cases, especially by focusing on recall for critical classes.
+
+The system can help clients, platforms, and third parties by:
+- identifying potentially concerning text patterns faster,
+- supporting prioritization workflows,
+- reducing manual review burden,
+- improving consistency in text-based screening pipelines.
+
+The project emphasizes responsible AI practices:
+- it is not a diagnostic device,
+- it should not replace clinical judgment,
+- it aims to reduce false negatives on critical conditions,
+- it uses grounded evaluation metrics such as macro F1, macro recall, and critical recall.
