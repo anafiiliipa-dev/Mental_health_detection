@@ -80,3 +80,7 @@ Desktop.ini
 # FAISS index cache
 # ============================================================
 faiss_index/
+
+# Internal audit notes (not for public repo)
+AUDIT.md
+

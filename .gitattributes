@@ -1,0 +1,68 @@
+# ============================================================
+# Mental Health Intelligence — Git attributes
+# ------------------------------------------------------------
+# Forces consistent LF line endings on commit, regardless of
+# whether contributors check out on Windows, macOS, or Linux.
+# Without this file, Windows checkouts auto-convert to CRLF
+# and produce massive false-positive diffs.
+# ============================================================
+
+# Default: treat every file as text and normalise to LF on commit.
+* text=auto eol=lf
+
+# ============================================================
+# Source code & configuration → LF, always
+# ============================================================
+*.py        text eol=lf
+*.toml      text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.cfg       text eol=lf
+*.ini       text eol=lf
+*.json      text eol=lf
+*.md        text eol=lf
+*.txt       text eol=lf
+*.csv       text eol=lf
+.gitignore  text eol=lf
+.gitattributes text eol=lf
+.env.example text eol=lf
+LICENSE     text eol=lf
+
+# ============================================================
+# Notebooks
+# ------------------------------------------------------------
+# Treat .ipynb as text (so they diff at all) but do NOT enable
+# git's text-conversion magic on them — Jupyter writes JSON
+# with \n endings and we want it preserved verbatim.
+# ============================================================
+*.ipynb     text eol=lf
+
+# Optional: enable nbstripout-managed clean diffs (uncomment if
+# you install nbstripout via pre-commit hooks):
+# *.ipynb   filter=nbstripout
+
+# ============================================================
+# Binary files — never normalise
+# ============================================================
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.webp      binary
+*.svg       binary
+*.pdf       binary
+*.joblib    binary
+*.pt        binary
+*.bin       binary
+*.safetensors binary
+*.faiss     binary
+*.zip       binary
+*.tar.gz    binary
+
+# ============================================================
+# GitHub Linguist hints — keep notebooks visible in language
+# stats, exclude generated artifacts from contribution graphs.
+# ============================================================
+notebooks/* linguist-vendored=false
+docs/*      linguist-documentation
+faiss_index/* linguist-generated
