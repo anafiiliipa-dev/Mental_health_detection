@@ -40,6 +40,18 @@ build/
 .eggs/
 
 # ============================================================
+# Testing / coverage
+# ============================================================
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ============================================================
+# Jupyter
+# ============================================================
+.ipynb_checkpoints/
+
+# ============================================================
 # Virtual environments
 # ============================================================
 .venv/
@@ -48,13 +60,20 @@ env/
 .env/
 
 # ============================================================
-# Images & static assets
+# Images & generated figures
 # ============================================================
-*.png
-*.jpg
-*.jpeg
-*.gif
 reports/figures/
+reports/**/*.png
+reports/**/*.jpg
+reports/**/*.jpeg
+reports/**/*.gif
+
+# Keep README screenshots
+!docs/screenshots/
+!docs/screenshots/*.png
+!docs/screenshots/*.jpg
+!docs/screenshots/*.jpeg
+!docs/screenshots/*.gif
 
 # ============================================================
 # OS artifacts
