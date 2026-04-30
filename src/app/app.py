@@ -26,8 +26,9 @@ from src.config.paths import (
     MODEL_CANDIDATES,
     NESTED_CV_SUMMARY_PATH,
     NORMAL_CV_SUMMARY_PATH,
+    SAMPLE_OUTPUTS_DIR,
 )
-from src.model.services import fallback_demo_prediction, load_model, predict_with_model
+from src.models.services import fallback_demo_prediction, load_model, predict_with_model
 from src.app.openrouter_client import ask_llm, get_default_model
 from src.rag.simple_rag import build_qa_chain
 
@@ -337,12 +338,20 @@ def load_dataset_info() -> Dict[str, Any]:
 
 @st.cache_data(show_spinner=False)
 def load_csv_if_exists(path: Path) -> Optional[pd.DataFrame]:
-    if path.exists():
-        try:
-            return pd.read_csv(path)
-        except Exception as exc:
-            st.warning(f"Could not load {path.name}: {exc}")
-            return None
+    primary_path = path
+    sample_path = SAMPLE_OUTPUTS_DIR / path.name
+
+    try:
+        if primary_path.exists():
+            return pd.read_csv(primary_path)
+
+        if sample_path.exists():
+            return pd.read_csv(sample_path)
+
+    except Exception as exc:
+        st.warning(f"Could not load {path.name}: {exc}")
+        return None
+
     return None
 
 
@@ -733,6 +742,22 @@ def render_predictions() -> None:
 def render_monitoring() -> None:
     render_header()
     artifacts = load_monitoring_artifacts()
+
+    using_sample_outputs = any(
+        not path.exists() and (SAMPLE_OUTPUTS_DIR / path.name).exists()
+        for path in [
+            FINAL_TEST_METRICS_PATH,
+            NESTED_CV_SUMMARY_PATH,
+            NORMAL_CV_SUMMARY_PATH,
+            GLOBAL_CLINICAL_REVIEW_PATH,
+        ]
+    )
+
+    if using_sample_outputs:
+        st.info(
+            "Displaying safe sample evaluation outputs from docs/sample_outputs/. "
+            "Run the notebooks to generate full local artifacts in reports/tables/."
+        )
 
     final_test_df    = artifacts["final_test_df"]
     nested_cv_df     = artifacts["nested_cv_df"]

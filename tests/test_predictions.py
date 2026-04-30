@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.model.services import fallback_demo_prediction, predict_with_model
+from src.models.services import fallback_demo_prediction, predict_with_model
 from src.config.paths import CLASS_LABELS
 
 

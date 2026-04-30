@@ -1,6 +1,5 @@
 <div align="center">
 
-
 # 🧠 Mental Health Intelligence
 
 ### Clinical-grade NLP triage with statistically robust ML and grounded LLMs
@@ -15,7 +14,7 @@
 
 **An early-screening decision-support tool that combines a Nested-CV-validated classical ML baseline with a Retrieval-Augmented LLM copilot — wrapped in a glassmorphism Streamlit dashboard.**
 
-[Quickstart](#-quickstart) · [Architecture](#-architecture) · [Methodology](#-methodology) · [Dashboard](#-dashboard) · [Ethics](#-ethics--limitations)
+[Overview](#-overview) · [Problem](#-the-problem) · [Architecture](#-architecture) · [Methodology](#-methodology) · [Dashboard](#-dashboard) · [Quickstart](#-quickstart) · [Ethics](#-ethics--limitations)
 
 </div>
 
@@ -24,15 +23,44 @@
 
 ---
 
+## 🚀 Overview
+
+**Mental Health Intelligence** is an end-to-end NLP system designed to **triage mental-health-related text** — patient narratives, social posts, intake forms — using a layered approach:
+
+- 🧮 **Classical ML baseline** — TF-IDF + LinearSVC, validated with Nested Cross-Validation
+- 🤖 **Transformer benchmark** — BERT / MentalBERT, evaluated head-to-head against the baseline
+- 📚 **Retrieval-Augmented Generation** — FAISS + LangChain over a curated knowledge base
+- 🩺 **Clinical-style evaluation** — per-class confusion matrices, error analysis, recall-skewed metrics
+
+The goal: **bridge statistical rigour with real-world interpretability**, delivering predictions that are not just accurate, but auditable.
+
+---
+
 ## 🎯 The Problem
 
-How do you triage mental-health-related text — patient narratives, social posts, intake forms — across **seven overlapping clinical categories** (ADHD, Anxiety, Autism, Bipolar, BPD, Depression, Schizophrenia) when:
+Mental-health signals in free-text are notoriously hard to classify because:
 
-- the classes are **imbalanced** (some are 5× rarer than others),
-- the linguistic differences are **semantically subtle**, and
-- false negatives on high-risk classes (Bipolar, Schizophrenia) carry asymmetric clinical cost?
+- Classes are **imbalanced** — some categories are 5× rarer than others
+- Linguistic differences are **semantically subtle** and context-dependent
+- False negatives on **high-risk classes** (Bipolar, Schizophrenia) carry asymmetric clinical cost — missing them is far worse than misrouting a Depression case to Anxiety
 
-This project answers that question with a system designed for **rigorous evaluation first, deployment second**.
+This project answers that challenge with a system designed for **rigorous evaluation first, deployment second**: careful preprocessing, balanced modelling, unbiased validation, and a recall-skewed optimisation target.
+
+---
+
+## 🧠 Classes
+
+The system predicts across **seven overlapping clinical categories**:
+
+| Class | Clinical priority |
+|---|---|
+| 🧩 **ADHD** | Standard |
+| 😰 **Anxiety** | Standard |
+| 🧠 **Autism** | Standard |
+| ⚡ **Bipolar** | **Critical** (recall-prioritised) |
+| 💔 **BPD** | Standard |
+| 🌧 **Depression** | Standard |
+| 🌀 **Schizophrenia** | **Critical** (recall-prioritised) |
 
 ---
 
@@ -81,12 +109,28 @@ flowchart TB
     class Artifacts,KB,Faiss store
 ```
 
-**Three independent reasoning paths**, each with strict isolation:
+### Inference flow
+
+```text
+User input
+   ↓
+Preprocessing (cleaning, normalisation)
+   ↓
+Feature extraction (TF-IDF / embeddings)
+   ↓
+LinearSVC baseline → Prediction + confidence
+   ↓
+Optional: RAG + LLM grounded explanation
+```
+
+### Three independent reasoning paths
+
+Each path enforces strict isolation to protect user data:
 
 | Path | Trigger | Privacy boundary |
 |---|---|---|
 | **Local ML inference** | `Predictions` page | Runs entirely offline. No text leaves the host. |
-| **RAG over project docs** | `Chat` page (default) | Embeddings local; only retrieved chunks + question sent to LLM. |
+| **RAG over project docs** | `Chat` page (default) | Embeddings local; only retrieved chunks + question sent to the LLM. |
 | **Direct LLM fallback** | RAG returns no context | Question sent to OpenRouter only when retrieval fails. |
 
 ---
@@ -97,21 +141,43 @@ flowchart TB
 
 Most ML benchmarks suffer from **selection bias** — hyperparameters tuned on the same folds used to report accuracy. We use a nested loop:
 
-```
+```text
 Outer K-Fold (test estimate)
 └── Inner K-Fold (GridSearch on train fold only)
-    └── Champion config promoted, refit on full train fold, scored on held-out test fold
+    └── Champion config promoted, refit on full train fold,
+        scored on held-out test fold
 ```
 
-The result is an **unbiased estimate** of generalisation error — what the model would actually do on never-seen text.
+The result is an **unbiased estimate of generalisation error** — what the model would actually do on never-seen text.
 
 ### Champion model: **LinearSVC + class-balanced weighting**
 
-A deliberately simple choice. The transformer benchmarks (`03_transformers_benchmark.ipynb`) showed that on this dataset, MentalBERT marginally outperforms LinearSVC on macro-F1 but **at 40× the inference cost** and with worse interpretability. For a triage tool that must be auditable in clinical settings, **LinearSVC wins**.
+A deliberately simple choice. The transformer benchmarks (`03_transformers_benchmark.ipynb`) showed that on this dataset, MentalBERT marginally outperforms LinearSVC on macro-F1 — but **at ~40× the inference cost** and with worse interpretability. For a triage tool that must be auditable in clinical settings, **LinearSVC wins**.
 
 ### Optimisation target: **Critical Recall**
 
-We deliberately don't optimise macro-F1 alone. Missing a Bipolar or Schizophrenia signal has real-world cost; mis-routing a Depression case to Anxiety is recoverable downstream. The metric reported in `final_test_metrics.csv` weights recall on critical classes (`Bipolar`, `Schizophrenia`) higher than the rest.
+We deliberately don't optimise macro-F1 alone. Missing a Bipolar or Schizophrenia signal has real-world cost; mis-routing a Depression case to Anxiety is recoverable downstream. The composite metric reported in `final_test_metrics.csv` weights recall on critical classes (`Bipolar`, `Schizophrenia`) higher than the rest — a deliberate clinical trade-off.
+
+### Evaluation suite
+
+- Accuracy, macro- and weighted-F1
+- Per-class precision, recall, F1
+- Confusion matrices
+- Clinical error analysis (notebook `04_clinical_evaluation.ipynb`)
+- SMOTE sensitivity ablation (notebook `02b_smote_sensitivity.ipynb`)
+
+---
+
+## 🔍 Advanced components
+
+### 🧠 Transformer benchmark
+Head-to-head comparison of BERT-base and MentalBERT against the LinearSVC baseline. Documents the **performance vs interpretability vs cost** trade-off that drives the champion choice.
+
+### 📚 RAG (Retrieval-Augmented Generation)
+FAISS vector store over `rag_source/`, retrieval via MiniLM-L6-v2 embeddings, fingerprinted cache for deterministic rebuilds. Grounds LLM responses in project documentation and cites sources.
+
+### 🤖 LLM integration
+OpenRouter client targeting `gpt-4o-mini`. Controlled prompting templates; hallucinations mitigated via retrieval grounding and a clear retrieval-miss fallback path.
 
 ---
 
@@ -123,13 +189,13 @@ A six-page Streamlit application with a custom glassmorphism theme:
 |---|---|
 | **Overview** | Live dataset stats, class badges, headline metrics from the latest evaluation run. |
 | **Predictions** | Paste any text → real-time classification, probability bars, confidence read-out. Falls back to a clearly-labelled keyword-based demo when no `.joblib` model is loaded. |
-| **Monitoring** | Renders the actual evaluation artifacts (nested CV summary, final test metrics, clinical review CSV) — no fake numbers. |
+| **Monitoring** | Renders the actual evaluation artifacts (Nested CV summary, final test metrics, clinical review CSV) — no fake numbers. |
 | **Chat** | RAG-powered Q&A grounded in `rag_source/`. Cites sources. Falls back to direct OpenRouter on retrieval miss. |
 | **History** | Session-scoped log of recent predictions. Cleared on browser refresh — no persistence. |
 | **About** | Project context, ethical framing, roadmap. |
 
-> 📸 **Screenshots:** add yours to `docs/screenshots/` and reference them here. Suggested:
-> `docs/screenshots/01-overview.png`, `02-predictions.png`, `03-chat-rag.png`, `04-monitoring.png`.
+> 📸 **Screenshots:** add yours to `docs/screenshots/` and reference them here. Suggested filenames:
+> `01-overview.png`, `02-predictions.png`, `03-chat-rag.png`, `04-monitoring.png`.
 
 ---
 
@@ -139,7 +205,7 @@ A six-page Streamlit application with a custom glassmorphism theme:
 
 - **Python 3.10+**
 - An [OpenRouter](https://openrouter.ai/) API key (free tier sufficient for `gpt-4o-mini`)
-- ~2 GB disk for embedding model + FAISS index on first run
+- ~2 GB disk for the embedding model + FAISS index on first run
 
 ### Install
 
@@ -182,9 +248,9 @@ Expected: **26 tests pass** across `test_predictions.py`, `test_rag.py`, `test_c
 
 ---
 
-## 📁 Project Structure
+## 📁 Project structure
 
-```
+```text
 mental-health-intelligence/
 ├── .github/workflows/ci.yml        # pytest + ruff on every PR
 ├── .env.example                    # placeholder secrets
@@ -264,7 +330,7 @@ This is a portfolio project, but issues and PRs are welcome. Please:
 
 ## 👥 Authors
 
-**Ana Gouveia & Nicolas Moignard** — DSFS-OD-14 cohort
+**Ana Gouveia ** — DSFS-OD-14 cohort
 
 ---
 

@@ -14,6 +14,7 @@ from pathlib import Path
 
 PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
 SRC_DIR: Path = PROJECT_ROOT / "src"
+SAMPLE_OUTPUTS_DIR: Path = PROJECT_ROOT / "docs" / "sample_outputs"
 
 # ============================================================
 # Data
