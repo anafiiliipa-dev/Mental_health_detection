@@ -27,7 +27,7 @@ from src.config.paths import (
     NESTED_CV_SUMMARY_PATH,
     NORMAL_CV_SUMMARY_PATH,
 )
-from src.model.services import fake_demo_prediction, load_model, predict_with_model
+from src.model.services import fallback_demo_prediction, load_model, predict_with_model
 from src.app.openrouter_client import ask_llm, get_default_model
 from src.rag.simple_rag import build_qa_chain
 
@@ -657,10 +657,10 @@ def render_predictions() -> None:
                     mode = "real"
                 except Exception as exc:
                     st.error(f"Prediction failed with the loaded model: {exc}")
-                    predicted_label, confidence, prob_df = fake_demo_prediction(user_text)
+                    predicted_label, confidence, prob_df = fallback_demo_prediction(user_text)
                     mode = "demo-fallback"
             else:
-                predicted_label, confidence, prob_df = fake_demo_prediction(user_text)
+                predicted_label, confidence, prob_df = fallback_demo_prediction(user_text)
                 mode = "demo"
 
         save_prediction_to_history(

@@ -81,7 +81,7 @@ def predict_with_model(
     return prediction, None, prob_df
 
 
-def fake_demo_prediction(text: str) -> Tuple[str, float, pd.DataFrame]:
+def fallback_demo_prediction(text: str) -> Tuple[str, float, pd.DataFrame]:
     """
     Heuristic-based demo prediction used when no real model is available.
 

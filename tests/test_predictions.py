@@ -9,57 +9,58 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.model.services import fake_demo_prediction, predict_with_model
+from src.model.services import fallback_demo_prediction, predict_with_model
 from src.config.paths import CLASS_LABELS
 
 
 # ============================================================
-# fake_demo_prediction
+# fallback_demo_prediction
 # ============================================================
 
-class TestFakeDemoPrediction:
+class TestFallbackDemoPrediction:
     def test_returns_three_values(self):
-        label, confidence, df = fake_demo_prediction("I feel anxious all the time")
+        label, confidence, df = fallback_demo_prediction("I feel anxious all the time")
         assert isinstance(label, str)
         assert isinstance(confidence, float)
         assert isinstance(df, pd.DataFrame)
 
     def test_label_is_in_class_labels(self):
-        label, _, _ = fake_demo_prediction("I feel hopeless and empty")
+        label, _, _ = fallback_demo_prediction("I feel hopeless and empty")
         assert label in CLASS_LABELS
 
     def test_probabilities_sum_to_one(self):
-        _, _, df = fake_demo_prediction("I hear voices watching me")
+        _, _, df = fallback_demo_prediction("I hear voices watching me")
         total = df["Probability"].sum()
         assert abs(total - 1.0) < 5e-3, f"Probabilities sum to {total}, expected ~1.0"
 
     def test_dataframe_has_correct_columns(self):
-        _, _, df = fake_demo_prediction("racing thoughts, no sleep")
+        _, _, df = fallback_demo_prediction("racing thoughts, no sleep")
         assert "Class" in df.columns
         assert "Probability" in df.columns
 
     def test_dataframe_sorted_descending(self):
-        _, _, df = fake_demo_prediction("I feel hopeless")
+        _, _, df = fallback_demo_prediction("I feel hopeless")
         probs = df["Probability"].tolist()
         assert probs == sorted(probs, reverse=True)
 
     def test_schizophrenia_keyword_match(self):
-        label, confidence, _ = fake_demo_prediction("I hear voices when nobody is around")
+        label, confidence, _ = fallback_demo_prediction("I hear voices when nobody is around")
         assert label == "Schizophrenia"
         assert confidence > 0.8
 
     def test_depression_keyword_match(self):
-        label, _, _ = fake_demo_prediction("I feel hopeless and worthless every day")
+        label, _, _ = fallback_demo_prediction("I feel hopeless and worthless every day")
         assert label == "Depression"
 
     def test_empty_text_returns_default(self):
-        label, confidence, df = fake_demo_prediction("")
+        label, confidence, df = fallback_demo_prediction("")
         assert label in CLASS_LABELS
         assert 0.0 < confidence <= 1.0
+        assert isinstance(df, pd.DataFrame)
 
     def test_confidence_is_in_valid_range(self):
         for text in ["random text", "voices watching me", "hopeless empty"]:
-            _, confidence, _ = fake_demo_prediction(text)
+            _, confidence, _ = fallback_demo_prediction(text)
             assert 0.0 <= confidence <= 1.0, f"Confidence {confidence} out of range"
 
 
@@ -76,6 +77,7 @@ class MockModelWithProba:
 
     def predict_proba(self, X):
         import numpy as np
+
         probs = np.zeros(len(CLASS_LABELS))
         probs[CLASS_LABELS.index("Anxiety")] = 0.9
         probs[CLASS_LABELS.index("Depression")] = 0.1
@@ -84,6 +86,7 @@ class MockModelWithProba:
 
 class MockModelNoProba:
     """Minimal sklearn-compatible model without predict_proba."""
+
     def predict(self, X):
         return ["ADHD"]
 

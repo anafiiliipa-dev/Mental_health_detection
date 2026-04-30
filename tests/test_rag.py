@@ -86,7 +86,12 @@ class TestSimpleLocalRAG:
     def _make_rag(self, docs=None):
         """Build a SimpleLocalRAG with a mocked vectorstore."""
         if docs is None:
-            docs = [MagicMock(page_content="The project uses Nested CV for robust evaluation.", metadata={"source": "project.txt"})]
+            docs = [
+                MagicMock(
+                    page_content="The project uses Nested CV for robust evaluation.",
+                    metadata={"source": "project.txt"},
+                )
+            ]
 
         mock_retriever = MagicMock()
         mock_retriever.invoke.return_value = docs
@@ -99,6 +104,14 @@ class TestSimpleLocalRAG:
     def test_empty_query_returns_prompt(self):
         rag = self._make_rag()
         result = rag.invoke({"query": ""})
+
+        assert "Please provide a question" in result["result"]
+        assert result["source_documents"] == []
+
+    def test_query_with_only_spaces_returns_prompt(self):
+        rag = self._make_rag()
+        result = rag.invoke({"query": "   "})
+
         assert "Please provide a question" in result["result"]
         assert result["source_documents"] == []
 
@@ -106,12 +119,26 @@ class TestSimpleLocalRAG:
         rag = self._make_rag()
         with patch("src.app.openrouter_client.ask_llm", return_value="Nested CV eliminates selection bias."):
             result = rag.invoke({"query": "What validation method is used?"})
+
         assert "result" in result
         assert "source_documents" in result
+
+    def test_source_documents_preserve_metadata(self):
+        doc = MagicMock(
+            page_content="The project uses Nested CV for robust evaluation.",
+            metadata={"source": "project.txt"},
+        )
+        rag = self._make_rag(docs=[doc])
+
+        with patch("src.app.openrouter_client.ask_llm", return_value="Answer."):
+            result = rag.invoke({"query": "What validation method is used?"})
+
+        assert result["source_documents"][0].metadata["source"] == "project.txt"
 
     def test_no_docs_found_returns_fallback_message(self):
         rag = self._make_rag(docs=[])
         result = rag.invoke({"query": "What is the meaning of life?"})
+
         assert "could not find" in result["result"].lower()
 
     def test_llm_is_called_with_context(self):
@@ -119,6 +146,7 @@ class TestSimpleLocalRAG:
         with patch("src.app.openrouter_client.ask_llm") as mock_llm:
             mock_llm.return_value = "Generated answer."
             result = rag.invoke({"query": "Explain the model"})
+
         mock_llm.assert_called_once()
         call_kwargs = mock_llm.call_args
         prompt_arg = call_kwargs[1].get("prompt") or call_kwargs[0][0]
