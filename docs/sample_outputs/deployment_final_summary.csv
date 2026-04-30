@@ -1,0 +1,7 @@
+item,value
+Champion model,LinearSVC_balanced
+Champion text variant,raw
+Deployment artifact,C:\Users\anafi\Desktop\final_project_jedha\models\best_classical_model.joblib
+Primary intended use,Non-diagnostic text triage support
+Human review required,Yes
+LLM role recommended,Downstream support only

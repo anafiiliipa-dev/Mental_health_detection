@@ -19,6 +19,13 @@ models/
 data/
 *.csv
 
+
+# Keep safe public sample outputs
+!docs/
+!docs/sample_outputs/
+!docs/sample_outputs/*.csv
+
+
 # ============================================================
 # Reports & generated artifacts
 # ============================================================

@@ -1,0 +1,10 @@
+item,value
+Champion model,LinearSVC_balanced
+Text variant,raw
+Total reviewed predictions,2255
+Total errors,474
+Critical false negatives,95
+Critical false positives,63
+Final test f1_macro,0.778927
+Final test recall_macro,0.778686
+Final test critical_recall,0.698068
