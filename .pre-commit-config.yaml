@@ -1,0 +1,48 @@
+# =============================================================================
+# Pre-commit hooks — Mental Health Intelligence
+# -----------------------------------------------------------------------------
+# Install:
+#     pre-commit install
+#
+# Run on every commit. To run manually on the whole tree:
+#     pre-commit run --all-files
+# =============================================================================
+
+repos:
+  # ---- Built-in housekeeping ---------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=2000"]
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  # ---- Ruff: lint + format (replaces black/isort/flake8) ------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.10
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
+
+  # ---- Strip notebook outputs to keep diffs clean -------------------------
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.7.1
+    hooks:
+      - id: nbstripout
+
+  # ---- Spell-check commit messages (optional but professional) ------------
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: []
