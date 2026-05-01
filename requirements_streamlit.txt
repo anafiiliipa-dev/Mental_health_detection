@@ -1,0 +1,19 @@
+# =============================================================================
+# Convenience shortcut for the Streamlit dashboard.
+#
+# Source of truth is pyproject.toml — `[project.optional-dependencies] streamlit`.
+# Keep this file in sync.
+#
+# Recommended:
+#     pip install -e ".[streamlit]"
+# =============================================================================
+
+-r requirements.txt
+
+# ---- Dashboard runtime -----------------------------------------------------
+streamlit>=1.32
+streamlit-option-menu>=0.3
+
+# ---- Plotting --------------------------------------------------------------
+matplotlib>=3.7
+seaborn>=0.13

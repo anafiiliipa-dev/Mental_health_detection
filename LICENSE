@@ -1,6 +1,6 @@
-﻿MIT License
+MIT License
 
-Copyright (c) 2026 Ana Gouveia, Nicolas Moignard
+Copyright (c) 2026 Ana Gouveia
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,11 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-NON-DIAGNOSTIC NOTICE
----------------------
-This software is a clinical decision-support aid and must NOT be used as a
-substitute for professional medical advice, diagnosis, or treatment. It is
-not certified as a medical device under the EU Medical Devices Regulation
-(MDR), the US FDA, or any equivalent framework. Outputs are intended only
-as signals for human review.
