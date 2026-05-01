@@ -6,16 +6,13 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.rag.simple_rag import (
+from mental_health.rag.simple_rag import (
     SimpleLocalRAG,
     _source_fingerprint,
     load_documents,
 )
-
 
 # ============================================================
 # load_documents
@@ -23,7 +20,7 @@ from src.rag.simple_rag import (
 
 class TestLoadDocuments:
     def test_returns_empty_list_when_dir_missing(self):
-        with patch("src.rag.simple_rag.RAG_SOURCE_DIR", Path("/nonexistent/path")):
+        with patch("mental_health.rag.simple_rag.RAG_SOURCE_DIR", Path("/nonexistent/path")):
             docs = load_documents()
         assert docs == []
 
@@ -31,7 +28,7 @@ class TestLoadDocuments:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             (tmp / "test.txt").write_text("Hello from test file", encoding="utf-8")
-            with patch("src.rag.simple_rag.RAG_SOURCE_DIR", tmp):
+            with patch("mental_health.rag.simple_rag.RAG_SOURCE_DIR", tmp):
                 docs = load_documents()
         assert len(docs) >= 1
         contents = " ".join(d.page_content for d in docs)
@@ -41,7 +38,7 @@ class TestLoadDocuments:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             (tmp / "notes.md").write_text("# Title\nSome markdown content", encoding="utf-8")
-            with patch("src.rag.simple_rag.RAG_SOURCE_DIR", tmp):
+            with patch("mental_health.rag.simple_rag.RAG_SOURCE_DIR", tmp):
                 docs = load_documents()
         assert len(docs) >= 1
 
@@ -52,7 +49,7 @@ class TestLoadDocuments:
 
 class TestSourceFingerprint:
     def test_returns_empty_string_when_dir_missing(self):
-        with patch("src.rag.simple_rag.RAG_SOURCE_DIR", Path("/nonexistent")):
+        with patch("mental_health.rag.simple_rag.RAG_SOURCE_DIR", Path("/nonexistent")):
             fp = _source_fingerprint()
         assert fp == ""
 
@@ -61,10 +58,10 @@ class TestSourceFingerprint:
             tmp = Path(tmpdir)
             f = tmp / "doc.txt"
             f.write_text("original content", encoding="utf-8")
-            with patch("src.rag.simple_rag.RAG_SOURCE_DIR", tmp):
+            with patch("mental_health.rag.simple_rag.RAG_SOURCE_DIR", tmp):
                 fp1 = _source_fingerprint()
             f.write_text("modified content", encoding="utf-8")
-            with patch("src.rag.simple_rag.RAG_SOURCE_DIR", tmp):
+            with patch("mental_health.rag.simple_rag.RAG_SOURCE_DIR", tmp):
                 fp2 = _source_fingerprint()
         assert fp1 != fp2
 
@@ -72,7 +69,7 @@ class TestSourceFingerprint:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             (tmp / "doc.txt").write_text("stable content", encoding="utf-8")
-            with patch("src.rag.simple_rag.RAG_SOURCE_DIR", tmp):
+            with patch("mental_health.rag.simple_rag.RAG_SOURCE_DIR", tmp):
                 fp1 = _source_fingerprint()
                 fp2 = _source_fingerprint()
         assert fp1 == fp2
@@ -117,7 +114,7 @@ class TestSimpleLocalRAG:
 
     def test_returns_result_and_source_docs(self):
         rag = self._make_rag()
-        with patch("src.app.openrouter_client.ask_llm", return_value="Nested CV eliminates selection bias."):
+        with patch("mental_health.app.openrouter_client.ask_llm", return_value="Nested CV eliminates selection bias."):
             result = rag.invoke({"query": "What validation method is used?"})
 
         assert "result" in result
@@ -130,7 +127,7 @@ class TestSimpleLocalRAG:
         )
         rag = self._make_rag(docs=[doc])
 
-        with patch("src.app.openrouter_client.ask_llm", return_value="Answer."):
+        with patch("mental_health.app.openrouter_client.ask_llm", return_value="Answer."):
             result = rag.invoke({"query": "What validation method is used?"})
 
         assert result["source_documents"][0].metadata["source"] == "project.txt"
@@ -143,7 +140,7 @@ class TestSimpleLocalRAG:
 
     def test_llm_is_called_with_context(self):
         rag = self._make_rag()
-        with patch("src.app.openrouter_client.ask_llm") as mock_llm:
+        with patch("mental_health.app.openrouter_client.ask_llm") as mock_llm:
             mock_llm.return_value = "Generated answer."
             result = rag.invoke({"query": "Explain the model"})
 

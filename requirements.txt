@@ -1,0 +1,29 @@
+# =============================================================================
+# Convenience shortcut for users who don't want to do `pip install -e .`
+#
+# Source of truth is pyproject.toml. Keep this file in sync with the
+# `[project] dependencies` section of pyproject.toml.
+#
+# For the full installable experience (incl. console script and editable
+# install), use:
+#     pip install -e .
+# =============================================================================
+
+# ---- Core scientific stack -------------------------------------------------
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10
+scikit-learn>=1.3
+joblib>=1.3
+
+# ---- Configuration ---------------------------------------------------------
+python-dotenv>=1.0
+
+# ---- LLM client + RAG ------------------------------------------------------
+openai>=1.14
+langchain>=0.2
+langchain-text-splitters>=0.2
+langchain-community>=0.2
+langchain-huggingface>=0.0.3
+faiss-cpu>=1.7
+sentence-transformers>=2.7

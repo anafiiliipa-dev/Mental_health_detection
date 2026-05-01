@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from html import escape
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 # ============================================================
 # Path setup — one insertion so all src.* imports resolve
@@ -13,12 +13,13 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from dotenv import load_dotenv
 import pandas as pd
 import streamlit as st
+from dotenv import load_dotenv
 from streamlit_option_menu import option_menu
 
-from src.config.paths import (
+from mental_health.app.openrouter_client import ask_llm, get_default_model
+from mental_health.config.paths import (
     CLASS_LABELS,
     DEFAULT_CLEAN_DATA_PATH,
     FINAL_TEST_METRICS_PATH,
@@ -28,9 +29,8 @@ from src.config.paths import (
     NORMAL_CV_SUMMARY_PATH,
     SAMPLE_OUTPUTS_DIR,
 )
-from src.models.services import fallback_demo_prediction, load_model, predict_with_model
-from src.app.openrouter_client import ask_llm, get_default_model
-from src.rag.simple_rag import build_qa_chain
+from mental_health.models.services import fallback_demo_prediction, load_model, predict_with_model
+from mental_health.rag.simple_rag import build_qa_chain
 
 load_dotenv()
 
@@ -310,8 +310,8 @@ def render_header() -> None:
 
 
 @st.cache_data(show_spinner=False)
-def load_dataset_info() -> Dict[str, Any]:
-    info: Dict[str, Any] = {
+def load_dataset_info() -> dict[str, Any]:
+    info: dict[str, Any] = {
         "total_texts": None,
         "num_classes": len(CLASS_LABELS),
         "class_names": CLASS_LABELS,
@@ -337,7 +337,7 @@ def load_dataset_info() -> Dict[str, Any]:
 
 
 @st.cache_data(show_spinner=False)
-def load_csv_if_exists(path: Path) -> Optional[pd.DataFrame]:
+def load_csv_if_exists(path: Path) -> pd.DataFrame | None:
     primary_path = path
     sample_path = SAMPLE_OUTPUTS_DIR / path.name
 
@@ -355,7 +355,7 @@ def load_csv_if_exists(path: Path) -> Optional[pd.DataFrame]:
     return None
 
 
-def safe_get_first_value(df: Optional[pd.DataFrame], candidate_cols: List[str]) -> Optional[Any]:
+def safe_get_first_value(df: pd.DataFrame | None, candidate_cols: list[str]) -> Any | None:
     if df is None or df.empty:
         return None
     for col in candidate_cols:
@@ -364,7 +364,7 @@ def safe_get_first_value(df: Optional[pd.DataFrame], candidate_cols: List[str]) 
     return None
 
 
-def format_metric(value: Optional[Any], decimals: int = 3) -> str:
+def format_metric(value: Any | None, decimals: int = 3) -> str:
     if value is None:
         return "N/A"
     try:
@@ -374,7 +374,7 @@ def format_metric(value: Optional[Any], decimals: int = 3) -> str:
 
 
 @st.cache_data(show_spinner=False)
-def load_monitoring_artifacts() -> Dict[str, Optional[pd.DataFrame]]:
+def load_monitoring_artifacts() -> dict[str, pd.DataFrame | None]:
     return {
         "final_test_df":  load_csv_if_exists(FINAL_TEST_METRICS_PATH),
         "nested_cv_df":   load_csv_if_exists(NESTED_CV_SUMMARY_PATH),
@@ -384,7 +384,7 @@ def load_monitoring_artifacts() -> Dict[str, Optional[pd.DataFrame]]:
 
 
 @st.cache_resource(show_spinner=False)
-def load_joblib_model(model_name: str) -> Tuple[Optional[Any], Optional[Path], Optional[str]]:
+def load_joblib_model(model_name: str) -> tuple[Any | None, Path | None, str | None]:
     return load_model(model_name)
 
 
@@ -392,7 +392,7 @@ def save_prediction_to_history(
     text: str,
     model_name: str,
     predicted_label: str,
-    confidence: Optional[float],
+    confidence: float | None,
     mode: str,
 ) -> None:
     st.session_state.history.insert(

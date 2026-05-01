@@ -14,15 +14,14 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from langchain_community.document_loaders import TextLoader
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from src.config.paths import RAG_INDEX_DIR, RAG_SOURCE_DIR
+from mental_health.config.paths import RAG_INDEX_DIR, RAG_SOURCE_DIR
 
 # ============================================================
 # Constants
@@ -39,9 +38,9 @@ _INDEX_MANIFEST = RAG_INDEX_DIR / "manifest.json"
 # Document loading
 # ============================================================
 
-def load_documents() -> List[Any]:
+def load_documents() -> list[Any]:
     """Load all .txt and .md files from the RAG source directory."""
-    docs: List[Any] = []
+    docs: list[Any] = []
     if not RAG_SOURCE_DIR.exists():
         return docs
     for pattern in ("**/*.txt", "**/*.md"):
@@ -81,7 +80,7 @@ def _get_embeddings() -> HuggingFaceEmbeddings:
     return HuggingFaceEmbeddings(model_name=_EMBEDDING_MODEL)
 
 
-def _build_vectorstore(docs: List[Any]) -> FAISS:
+def _build_vectorstore(docs: list[Any]) -> FAISS:
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=_CHUNK_SIZE,
         chunk_overlap=_CHUNK_OVERLAP,
@@ -91,7 +90,7 @@ def _build_vectorstore(docs: List[Any]) -> FAISS:
     return FAISS.from_documents(chunks, embeddings)
 
 
-def _load_or_build_vectorstore() -> Optional[FAISS]:
+def _load_or_build_vectorstore() -> FAISS | None:
     """
     Return a FAISS vectorstore, loading from disk when possible.
     Rebuilds (and persists) when the source files have changed.
@@ -149,8 +148,10 @@ class SimpleLocalRAG:
         "Be concise, accurate, and professional."
     ), init=False, repr=False)
 
-    def invoke(self, inputs: Dict[str, str]) -> Dict[str, Any]:
-        from src.app.openrouter_client import ask_llm  # local import to avoid circular deps
+    def invoke(self, inputs: dict[str, str]) -> dict[str, Any]:
+        from mental_health.app.openrouter_client import (
+            ask_llm,  # local import to avoid circular deps
+        )
 
         query = inputs.get("query", "").strip()
         if not query:
@@ -182,7 +183,7 @@ class SimpleLocalRAG:
         return {"result": answer, "source_documents": source_documents}
 
 
-def build_qa_chain() -> Optional[SimpleLocalRAG]:
+def build_qa_chain() -> SimpleLocalRAG | None:
     """Build and return a SimpleLocalRAG, or None if no documents exist."""
     vectorstore = _load_or_build_vectorstore()
     if vectorstore is None:

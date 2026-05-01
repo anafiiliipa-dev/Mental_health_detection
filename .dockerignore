@@ -1,0 +1,72 @@
+# =============================================================================
+# Files excluded from the Docker build context.
+# Keeps the build fast and the image small.
+# =============================================================================
+
+# Python ----------------------------------------------------------------------
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# Virtualenvs -----------------------------------------------------------------
+.venv/
+venv/
+env/
+
+# Testing & coverage ----------------------------------------------------------
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# Notebooks (re-trainable inside the container if needed) ---------------------
+.ipynb_checkpoints/
+notebooks/
+**/*.ipynb
+
+# Data / models / reports — never bake into the image -------------------------
+data/
+models/
+reports/
+*.joblib
+*.bin
+*.safetensors
+*.pt
+
+# Local cache -----------------------------------------------------------------
+faiss_index/
+
+# Secrets ---------------------------------------------------------------------
+.env
+*.env
+
+# Git / VCS -------------------------------------------------------------------
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# Editor / OS -----------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Docs (image doesn't need them at runtime) -----------------------------------
+docs/screenshots/
+docs/sample_outputs/
+
+# Misc ------------------------------------------------------------------------
+*.log
+*.tmp
+*.zip
+*.tar.gz
+README.md.bak
+AUDIT.md

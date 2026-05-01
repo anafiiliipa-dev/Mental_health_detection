@@ -5,10 +5,9 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Optional
 
 from dotenv import load_dotenv
-from openai import OpenAI, APIConnectionError, APIStatusError, RateLimitError
+from openai import APIConnectionError, APIStatusError, OpenAI, RateLimitError
 
 load_dotenv()
 
@@ -55,7 +54,7 @@ def get_default_model() -> str:
 
 def ask_llm(
     prompt: str,
-    system_prompt: Optional[str] = None,
+    system_prompt: str | None = None,
     max_tokens: int = _MAX_TOKENS,
 ) -> str:
     """
@@ -72,7 +71,7 @@ def ask_llm(
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
-    last_exc: Optional[Exception] = None
+    last_exc: Exception | None = None
 
     for attempt in range(_MAX_RETRIES):
         try:

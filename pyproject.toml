@@ -1,12 +1,15 @@
 # ============================================================
 # Mental Health Intelligence — Project metadata & dependencies
 # ------------------------------------------------------------
-# Replaces the legacy requirements.txt + requirements_streamlit.txt.
+# Single source of truth for dependencies. The legacy files
+# requirements.txt and requirements_streamlit.txt are kept as
+# convenience shortcuts that mirror these extras.
+#
 # Use:
-#   pip install -e .              # core only
-#   pip install -e ".[streamlit]" # core + dashboard
-#   pip install -e ".[dev]"       # core + tests + linters
-#   pip install -e ".[all]"       # everything (incl. transformers)
+#   pip install -e .                # core only
+#   pip install -e ".[streamlit]"   # core + dashboard
+#   pip install -e ".[dev]"         # core + tests + linters
+#   pip install -e ".[all]"         # everything (incl. transformers)
 # ============================================================
 
 [build-system]
@@ -15,25 +18,35 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mental-health-intelligence"
-version = "0.2.0"
+version = "0.3.0"
 description = "Clinical-grade NLP triage with Nested-CV-validated ML and grounded LLMs."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
     { name = "Ana Gouveia" },
-    { name = "Nicolas Moignard" },
 ]
-keywords = ["nlp", "mental-health", "clinical", "rag", "streamlit", "scikit-learn"]
+keywords = [
+    "nlp",
+    "mental-health",
+    "clinical",
+    "rag",
+    "streamlit",
+    "scikit-learn",
+    "langchain",
+    "faiss",
+]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Healthcare Industry",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Linguistic",
 ]
 
 # ---- Core runtime: classical ML + RAG + LLM client ----
@@ -54,7 +67,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-
 # ---- Dashboard (Streamlit + plotting) ----
 streamlit = [
     "streamlit>=1.32",
@@ -94,15 +106,15 @@ all = [
 ]
 
 [project.urls]
-Homepage   = "https://github.com/anafiiliipa-dev/Mental_health_detection"
-Repository = "https://github.com/anafiiliipa-dev/Mental_health_detection"
-Issues     = "https://github.com/anafiiliipa-dev/Mental_health_detection/issues"
+Homepage      = "https://github.com/anafiiliipa-dev/Mental_health_detection"
+Repository    = "https://github.com/anafiiliipa-dev/Mental_health_detection"
+Issues        = "https://github.com/anafiiliipa-dev/Mental_health_detection/issues"
+Documentation = "https://github.com/anafiiliipa-dev/Mental_health_detection/blob/main/docs/architecture.md"
 
 # ---- Console entry point so users can launch the dashboard
 #      with a single command after install ----
 [project.scripts]
 mental-health-dashboard = "mental_health.app.app:main"
-
 
 # ============================================================
 # setuptools — package discovery
@@ -110,7 +122,6 @@ mental-health-dashboard = "mental_health.app.app:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["mental_health*"]
-
 
 # ============================================================
 # pytest
@@ -123,12 +134,32 @@ addopts = [
     "-v",
     "--strict-markers",
     "--tb=short",
+    "--color=yes",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
 ]
 
+# ============================================================
+# coverage
+# ============================================================
+[tool.coverage.run]
+source = ["src/mental_health"]
+omit = [
+    "*/tests/*",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
 
 # ============================================================
 # ruff — fast linter + formatter (replaces black/isort/flake8)
@@ -136,27 +167,32 @@ filterwarnings = [
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-extend-exclude = ["notebooks", "faiss_index", ".venv"]
+extend-exclude = ["notebooks", "faiss_index", ".venv", "build", "dist"]
 
 [tool.ruff.lint]
 select = [
-    "E",    # pycodestyle errors
-    "W",    # pycodestyle warnings
-    "F",    # pyflakes
-    "I",    # isort
-    "B",    # flake8-bugbear
-    "UP",   # pyupgrade
-    "SIM",  # flake8-simplify
-    "RUF",  # ruff-specific rules
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific rules
+    "N",   # pep8-naming
+    "C4",  # flake8-comprehensions
 ]
 ignore = [
-    "E501",  # line too long (formatter handles it)
+    "E501", # line too long (formatter handles it)
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["B", "SIM"]   # tests legitimately use patterns flagged in src code
-"src/mental_health/app/app.py" = ["E402"]  # sys.path tweak before imports
+"tests/*" = ["B", "SIM", "N", "F841", "RUF059"]        # tests legitimately use patterns flagged in src code
+"src/mental_health/app/app.py" = ["E402", "N806", "B905", "SIM117"]  # sys.path tweak; UPPER_CASE locals are private constants
+"src/mental_health/models/services.py" = ["N806"]      # _UPPER_CASE locals are private constants by convention
+"notebooks/*" = ["ALL"]
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+docstring-code-format = true
