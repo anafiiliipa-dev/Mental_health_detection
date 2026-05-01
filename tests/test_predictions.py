@@ -9,8 +9,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.models.services import fallback_demo_prediction, predict_with_model
-from src.config.paths import CLASS_LABELS
+from mental_health.models.services import fallback_demo_prediction, predict_with_model
+from mental_health.config.paths import CLASS_LABELS
 
 
 # ============================================================

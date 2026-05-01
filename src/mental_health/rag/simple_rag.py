@@ -22,7 +22,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from src.config.paths import RAG_INDEX_DIR, RAG_SOURCE_DIR
+from mental_health.config.paths import RAG_INDEX_DIR, RAG_SOURCE_DIR
 
 # ============================================================
 # Constants
@@ -150,7 +150,7 @@ class SimpleLocalRAG:
     ), init=False, repr=False)
 
     def invoke(self, inputs: Dict[str, str]) -> Dict[str, Any]:
-        from src.app.openrouter_client import ask_llm  # local import to avoid circular deps
+        from mental_health.app.openrouter_client import ask_llm  # local import to avoid circular deps
 
         query = inputs.get("query", "").strip()
         if not query:

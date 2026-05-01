@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.app.openrouter_client import ask_llm, get_default_model
+from mental_health.app.openrouter_client import ask_llm, get_default_model
 
 
 # ============================================================

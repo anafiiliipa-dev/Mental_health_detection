@@ -18,7 +18,7 @@ import pandas as pd
 import streamlit as st
 from streamlit_option_menu import option_menu
 
-from src.config.paths import (
+from mental_health.config.paths import (
     CLASS_LABELS,
     DEFAULT_CLEAN_DATA_PATH,
     FINAL_TEST_METRICS_PATH,
@@ -28,9 +28,9 @@ from src.config.paths import (
     NORMAL_CV_SUMMARY_PATH,
     SAMPLE_OUTPUTS_DIR,
 )
-from src.models.services import fallback_demo_prediction, load_model, predict_with_model
-from src.app.openrouter_client import ask_llm, get_default_model
-from src.rag.simple_rag import build_qa_chain
+from mental_health.models.services import fallback_demo_prediction, load_model, predict_with_model
+from mental_health.app.openrouter_client import ask_llm, get_default_model
+from mental_health.rag.simple_rag import build_qa_chain
 
 load_dotenv()
 
