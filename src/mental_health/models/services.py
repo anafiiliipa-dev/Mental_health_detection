@@ -7,19 +7,18 @@ never call joblib directly.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any
 
 import joblib
 import pandas as pd
 
 from mental_health.config.paths import CLASS_LABELS, MODEL_CANDIDATES
 
-
 # ============================================================
 # Model loading
 # ============================================================
 
-def find_model_path(model_name: str) -> Optional[Path]:
+def find_model_path(model_name: str) -> Path | None:
     """Return the first existing path for *model_name*, or None."""
     for candidate in MODEL_CANDIDATES.get(model_name, []):
         if candidate.exists():
@@ -27,7 +26,7 @@ def find_model_path(model_name: str) -> Optional[Path]:
     return None
 
 
-def load_model(model_name: str) -> Tuple[Optional[Any], Optional[Path], Optional[str]]:
+def load_model(model_name: str) -> tuple[Any | None, Path | None, str | None]:
     """
     Load a joblib model by name.
 
@@ -55,7 +54,7 @@ def load_model(model_name: str) -> Tuple[Optional[Any], Optional[Path], Optional
 def predict_with_model(
     model: Any,
     text: str,
-) -> Tuple[str, Optional[float], pd.DataFrame]:
+) -> tuple[str, float | None, pd.DataFrame]:
     """
     Run inference with a loaded sklearn-compatible model.
 
@@ -81,7 +80,7 @@ def predict_with_model(
     return prediction, None, prob_df
 
 
-def fallback_demo_prediction(text: str) -> Tuple[str, float, pd.DataFrame]:
+def fallback_demo_prediction(text: str) -> tuple[str, float, pd.DataFrame]:
     """
     Heuristic-based demo prediction used when no real model is available.
 
@@ -126,7 +125,7 @@ def fallback_demo_prediction(text: str) -> Tuple[str, float, pd.DataFrame]:
 # Evaluation artifact loading
 # ============================================================
 
-def load_csv_with_fallback(relative_path: str) -> Tuple[Optional[pd.DataFrame], Optional[Path], bool]:
+def load_csv_with_fallback(relative_path: str) -> tuple[pd.DataFrame | None, Path | None, bool]:
     """
     Load an evaluation CSV from the real reports folder.
 

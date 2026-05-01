@@ -11,7 +11,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mental_health.app.openrouter_client import ask_llm, get_default_model
 
-
 # ============================================================
 # get_default_model
 # ============================================================
@@ -46,7 +45,7 @@ def _mock_response(content: str):
 class TestAskLlm:
     def test_returns_string_on_success(self, monkeypatch):
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test-key")
-        with patch("src.app.openrouter_client.get_openrouter_client") as mock_factory:
+        with patch("mental_health.app.openrouter_client.get_openrouter_client") as mock_factory:
             client = MagicMock()
             client.chat.completions.create.return_value = _mock_response("Hello!")
             mock_factory.return_value = client
@@ -61,7 +60,7 @@ class TestAskLlm:
 
     def test_system_prompt_is_included_in_messages(self, monkeypatch):
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test-key")
-        with patch("src.app.openrouter_client.get_openrouter_client") as mock_factory:
+        with patch("mental_health.app.openrouter_client.get_openrouter_client") as mock_factory:
             client = MagicMock()
             client.chat.completions.create.return_value = _mock_response("ok")
             mock_factory.return_value = client
@@ -78,8 +77,8 @@ class TestAskLlm:
         from openai import RateLimitError
 
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test-key")
-        with patch("src.app.openrouter_client.get_openrouter_client") as mock_factory:
-            with patch("src.app.openrouter_client.time.sleep"):  # skip waits
+        with patch("mental_health.app.openrouter_client.get_openrouter_client") as mock_factory:
+            with patch("mental_health.app.openrouter_client.time.sleep"):  # skip waits
                 client = MagicMock()
                 rate_limit_exc = RateLimitError(
                     message="rate limited",
@@ -100,8 +99,8 @@ class TestAskLlm:
         from openai import RateLimitError
 
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test-key")
-        with patch("src.app.openrouter_client.get_openrouter_client") as mock_factory:
-            with patch("src.app.openrouter_client.time.sleep"):
+        with patch("mental_health.app.openrouter_client.get_openrouter_client") as mock_factory:
+            with patch("mental_health.app.openrouter_client.time.sleep"):
                 client = MagicMock()
                 exc = RateLimitError(
                     message="rate limited",
