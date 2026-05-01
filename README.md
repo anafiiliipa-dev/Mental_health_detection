@@ -4,22 +4,24 @@
 
 ### Clinical-grade NLP triage with statistically robust ML and grounded LLMs
 
+[![CI](https://github.com/anafiiliipa-dev/Mental_health_detection/actions/workflows/ci.yml/badge.svg)](https://github.com/anafiiliipa-dev/Mental_health_detection/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.32%2B-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![scikit-learn](https://img.shields.io/badge/scikit--learn-1.3%2B-F7931E?logo=scikit-learn&logoColor=white)](https://scikit-learn.org/)
 [![LangChain](https://img.shields.io/badge/LangChain-RAG-1C3C3C?logo=langchain&logoColor=white)](https://www.langchain.com/)
 [![FAISS](https://img.shields.io/badge/FAISS-Vector_Store-0467DF)](https://github.com/facebookresearch/faiss)
 [![Tests](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org/)
-[![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+[![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 **An early-screening decision-support tool that combines a Nested-CV-validated classical ML baseline with a Retrieval-Augmented LLM copilot — wrapped in a glassmorphism Streamlit dashboard.**
 
-[Overview](#-overview) · [Problem](#-the-problem) · [Architecture](#-architecture) · [Methodology](#-methodology) · [Dashboard](#-dashboard) · [Quickstart](#-quickstart) · [Ethics](#-ethics--limitations)
+[Overview](#-overview) · [Problem](#-the-problem) · [Architecture](#-architecture) · [Methodology](#-methodology) · [Results](#-results) · [Dashboard](#-dashboard) · [Quickstart](#-quickstart) · [Docker](#-run-with-docker) · [Ethics](#-ethics--limitations)
 
 </div>
 
-> [!WARNING]
-> **Non-diagnostic disclaimer.** This system is a clinical decision-support aid. It must **never** replace a licensed clinician's judgement, and is not certified as a medical device under the EU MDR or equivalent frameworks.
+> [!CAUTION]
+> **Non-diagnostic disclaimer.** This system is a clinical decision-support aid. It must **never** replace a licensed clinician's judgement, and is not certified as a medical device under the EU MDR, the US FDA, or any equivalent framework. See [`NOTICE.md`](NOTICE.md) for the full notice.
 
 ---
 
@@ -52,15 +54,15 @@ This project answers that challenge with a system designed for **rigorous evalua
 
 The system predicts across **seven overlapping clinical categories**:
 
-| Class | Clinical priority |
-|---|---|
-| 🧩 **ADHD** | Standard |
-| 😰 **Anxiety** | Standard |
-| 🧠 **Autism** | Standard |
-| ⚡ **Bipolar** | **Critical** (recall-prioritised) |
-| 💔 **BPD** | Standard |
-| 🌧 **Depression** | Standard |
-| 🌀 **Schizophrenia** | **Critical** (recall-prioritised) |
+| Class                | Clinical priority                  |
+| -------------------- | ---------------------------------- |
+| 🧩 **ADHD**          | Standard                           |
+| 😰 **Anxiety**       | Standard                           |
+| 🧠 **Autism**        | Standard                           |
+| ⚡ **Bipolar**        | **Critical** (recall-prioritised)  |
+| 💔 **BPD**           | Standard                           |
+| 🌧 **Depression**    | Standard                           |
+| 🌀 **Schizophrenia** | **Critical** (recall-prioritised)  |
 
 ---
 
@@ -127,11 +129,13 @@ Optional: RAG + LLM grounded explanation
 
 Each path enforces strict isolation to protect user data:
 
-| Path | Trigger | Privacy boundary |
-|---|---|---|
-| **Local ML inference** | `Predictions` page | Runs entirely offline. No text leaves the host. |
-| **RAG over project docs** | `Chat` page (default) | Embeddings local; only retrieved chunks + question sent to the LLM. |
-| **Direct LLM fallback** | RAG returns no context | Question sent to OpenRouter only when retrieval fails. |
+| Path                       | Trigger                | Privacy boundary                                                     |
+| -------------------------- | ---------------------- | -------------------------------------------------------------------- |
+| **Local ML inference**     | `Predictions` page     | Runs entirely offline. No text leaves the host.                      |
+| **RAG over project docs**  | `Chat` page (default)  | Embeddings local; only retrieved chunks + question sent to the LLM.  |
+| **Direct LLM fallback**    | RAG returns no context | Question sent to OpenRouter only when retrieval fails.               |
+
+> 📖 For a detailed walkthrough of design decisions, trade-offs, and rejected alternatives, see [`docs/architecture.md`](docs/architecture.md).
 
 ---
 
@@ -143,9 +147,9 @@ Most ML benchmarks suffer from **selection bias** — hyperparameters tuned on t
 
 ```text
 Outer K-Fold (test estimate)
-└── Inner K-Fold (GridSearch on train fold only)
-    └── Champion config promoted, refit on full train fold,
-        scored on held-out test fold
+  └── Inner K-Fold (GridSearch on train fold only)
+       └── Champion config promoted, refit on full train fold,
+           scored on held-out test fold
 ```
 
 The result is an **unbiased estimate of generalisation error** — what the model would actually do on never-seen text.
@@ -168,16 +172,38 @@ We deliberately don't optimise macro-F1 alone. Missing a Bipolar or Schizophreni
 
 ---
 
-## 🔍 Advanced components
+## 📊 Results
 
-### 🧠 Transformer benchmark
-Head-to-head comparison of BERT-base and MentalBERT against the LinearSVC baseline. Documents the **performance vs interpretability vs cost** trade-off that drives the champion choice.
+> <!-- TODO: replace placeholder values with actual numbers from reports/tables/final_test_metrics.csv -->
 
-### 📚 RAG (Retrieval-Augmented Generation)
-FAISS vector store over `rag_source/`, retrieval via MiniLM-L6-v2 embeddings, fingerprinted cache for deterministic rebuilds. Grounds LLM responses in project documentation and cites sources.
+### Headline numbers (held-out test set)
 
-### 🤖 LLM integration
-OpenRouter client targeting `gpt-4o-mini`. Controlled prompting templates; hallucinations mitigated via retrieval grounding and a clear retrieval-miss fallback path.
+| Metric                          | LinearSVC (champion) | MentalBERT (benchmark) |
+| ------------------------------- | -------------------- | ---------------------- |
+| Macro-F1                        | `0.XX`               | `0.XX`                 |
+| Weighted-F1                     | `0.XX`               | `0.XX`                 |
+| Accuracy                        | `0.XX`               | `0.XX`                 |
+| **Recall — Bipolar (critical)** | `0.XX`               | `0.XX`                 |
+| **Recall — Schizophrenia (critical)** | `0.XX`         | `0.XX`                 |
+| Inference latency (ms / sample) | `< 5 ms`             | `~200 ms`              |
+| Model size                      | `~10 MB`             | `~440 MB`              |
+
+### Nested CV (mean ± std across outer folds)
+
+| Metric              | Value             |
+| ------------------- | ----------------- |
+| Macro-F1            | `0.XX ± 0.0X`     |
+| Critical-recall avg | `0.XX ± 0.0X`     |
+
+### Why LinearSVC wins despite a slightly lower macro-F1
+
+| Dimension          | LinearSVC | MentalBERT | Decision driver |
+| ------------------ | --------- | ---------- | --------------- |
+| Macro-F1           | `0.XX`    | `0.XX`     | Within 1–2 pp |
+| Inference cost     | `1×`      | `~40×`     | LinearSVC scales for batch triage |
+| Interpretability   | Coefficients per token | Black-box transformer attention | LinearSVC defensible to a clinician |
+| Bias auditability  | High      | Low        | LinearSVC easier to slice & audit |
+| Memory footprint   | `~10 MB`  | `~440 MB`  | LinearSVC trivial to deploy |
 
 ---
 
@@ -185,17 +211,23 @@ OpenRouter client targeting `gpt-4o-mini`. Controlled prompting templates; hallu
 
 A six-page Streamlit application with a custom glassmorphism theme:
 
-| Page | What it does |
-|---|---|
-| **Overview** | Live dataset stats, class badges, headline metrics from the latest evaluation run. |
+| Page            | What it does                                                                                                                        |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Overview**    | Live dataset stats, class badges, headline metrics from the latest evaluation run.                                                  |
 | **Predictions** | Paste any text → real-time classification, probability bars, confidence read-out. Falls back to a clearly-labelled keyword-based demo when no `.joblib` model is loaded. |
-| **Monitoring** | Renders the actual evaluation artifacts (Nested CV summary, final test metrics, clinical review CSV) — no fake numbers. |
-| **Chat** | RAG-powered Q&A grounded in `rag_source/`. Cites sources. Falls back to direct OpenRouter on retrieval miss. |
-| **History** | Session-scoped log of recent predictions. Cleared on browser refresh — no persistence. |
-| **About** | Project context, ethical framing, roadmap. |
+| **Monitoring**  | Renders the actual evaluation artifacts (Nested CV summary, final test metrics, clinical review CSV) — no fake numbers.             |
+| **Chat**        | RAG-powered Q&A grounded in `rag_source/`. Cites sources. Falls back to direct OpenRouter on retrieval miss.                        |
+| **History**     | Session-scoped log of recent predictions. Cleared on browser refresh — no persistence.                                              |
+| **About**       | Project context, ethical framing, roadmap.                                                                                          |
 
-> 📸 **Screenshots:** add yours to `docs/screenshots/` and reference them here. Suggested filenames:
-> `01-overview.png`, `02-predictions.png`, `03-chat-rag.png`, `04-monitoring.png`.
+### Screenshots
+
+<!-- TODO: capture and commit these 4 screenshots -->
+
+|                         |                         |
+| ----------------------- | ----------------------- |
+| ![Overview](docs/screenshots/01-overview.png)     | ![Predictions](docs/screenshots/02-predictions.png) |
+| ![Monitoring](docs/screenshots/03-monitoring.png) | ![Chat with RAG](docs/screenshots/04-chat-rag.png)  |
 
 ---
 
@@ -230,10 +262,20 @@ cp .env.example .env
 
 The repo **never** commits `.env` — only `.env.example` (placeholder). Confirmed by `.gitignore`.
 
+### Obtain or train the model
+
+The trained `.joblib` artifact is **not committed** (see `.gitignore`). You have three options:
+
+1. **Train it yourself.** Run notebooks `01_data_cleaning.ipynb` → `02_classical_ml_benchmark.ipynb` end-to-end. This produces `models/champion.joblib` (~10 MB).
+2. **Run without it (demo mode).** The dashboard will fall back to a clearly-labelled keyword-based prediction, so the UI is fully functional for inspection.
+3. **Use the safe sample evaluation outputs.** The `Monitoring` page automatically falls back to `docs/sample_outputs/` if no real run is present.
+
 ### Run
 
 ```bash
 streamlit run src/mental_health/app/app.py
+# or, after `pip install -e .`:
+mental-health-dashboard
 ```
 
 Visit `http://localhost:8501`.
@@ -244,7 +286,32 @@ Visit `http://localhost:8501`.
 pytest -v
 ```
 
-Expected: **26 tests pass** across `test_predictions.py`, `test_rag.py`, `test_client.py`. All external services (OpenRouter, FAISS) are mocked — no network or API key required.
+All external services (OpenRouter, FAISS) are mocked — no network or API key required to run the test suite.
+
+---
+
+## 🐳 Run with Docker
+
+Zero-setup deployment for evaluators and recruiters. Single command:
+
+```bash
+docker compose up --build
+```
+
+Visit `http://localhost:8501`.
+
+For a custom one-shot run:
+
+```bash
+docker build -t mental-health-intelligence .
+docker run --rm -p 8501:8501 \
+  -e OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
+  -v "$(pwd)/models:/app/models:ro" \
+  -v "$(pwd)/reports/tables:/app/reports/tables:ro" \
+  mental-health-intelligence
+```
+
+The image runs as a non-root user, exposes a `/_stcore/health` healthcheck, and uses multi-stage build hints for fast rebuilds.
 
 ---
 
@@ -252,19 +319,28 @@ Expected: **26 tests pass** across `test_predictions.py`, `test_rag.py`, `test_c
 
 ```text
 mental-health-intelligence/
-├── .github/workflows/ci.yml        # pytest + ruff on every PR
-├── .env.example                    # placeholder secrets
-├── .gitattributes                  # forces LF, marks notebooks
-├── .gitignore                      # data/, models/, reports/, .env, *.joblib
-├── pyproject.toml                  # single source of truth for deps
+├── .github/workflows/ci.yml           # pytest + ruff on every PR
+├── .pre-commit-config.yaml            # ruff + nbstripout hooks
+├── .env.example                       # placeholder secrets
+├── .gitattributes                     # forces LF, marks notebooks
+├── .gitignore                         # data/, models/, reports/, .env, *.joblib
+├── .dockerignore
+├── pyproject.toml                     # single source of truth for deps
+├── requirements.txt                   # convenience shortcut (mirrors pyproject)
+├── requirements_streamlit.txt         # convenience shortcut (streamlit extra)
 ├── README.md
-├── LICENSE                         # MIT
+├── LICENSE                            # pure MIT (so GitHub detects it)
+├── NOTICE.md                          # non-diagnostic notice
+├── CHANGELOG.md
+├── Dockerfile
+├── docker-compose.yml
 │
 ├── docs/
-│   ├── architecture.md             # design decisions and trade-offs
-│   └── screenshots/                # dashboard captures for the README
+│   ├── architecture.md                # design decisions and trade-offs
+│   ├── screenshots/                   # dashboard captures for the README
+│   └── sample_outputs/                # safe public CSVs (aggregated only)
 │
-├── notebooks/                      # 1️⃣ → 5️⃣ pipeline, runnable end-to-end
+├── notebooks/                         # 1️⃣ → 5️⃣ pipeline, runnable end-to-end
 │   ├── 01_data_cleaning.ipynb
 │   ├── 02_classical_ml_benchmark.ipynb       # ← Nested CV champion
 │   ├── 02b_smote_sensitivity.ipynb           # ← class-imbalance ablation
@@ -272,38 +348,42 @@ mental-health-intelligence/
 │   ├── 04_clinical_evaluation.ipynb
 │   └── 05_deployment_mvp.ipynb
 │
-├── src/mental_health/              # installable package
+├── src/mental_health/                 # installable package
+│   ├── __init__.py
 │   ├── app/
-│   │   ├── app.py                  # Streamlit entry point
-│   │   ├── pages/                  # one module per dashboard page
-│   │   ├── styles.py               # custom CSS
-│   │   └── llm/openrouter_client.py
-│   ├── config/paths.py             # centralised path constants
-│   ├── model/services.py           # load_model, predict_with_model
-│   └── rag/simple_rag.py           # FAISS + LangChain retrieval
+│   │   ├── app.py                     # Streamlit entry point
+│   │   ├── pages/                     # one module per dashboard page
+│   │   ├── styles.py                  # custom CSS (glassmorphism)
+│   │   └── openrouter_client.py
+│   ├── config/
+│   │   └── paths.py                   # centralised path constants
+│   ├── models/
+│   │   └── services.py                # load_model, predict_with_model
+│   └── rag/
+│       └── simple_rag.py              # FAISS + LangChain retrieval
 │
-├── tests/                          # pytest, fully mocked
+├── tests/                             # pytest, fully mocked
 │   ├── conftest.py
 │   ├── test_predictions.py
 │   ├── test_rag.py
 │   └── test_client.py
 │
-├── rag_source/                     # knowledge base for the Chat page
-└── data/  models/  reports/        # gitignored (local only)
+├── rag_source/                        # knowledge base for the Chat page
+└── data/  models/  reports/           # gitignored (local only)
 ```
 
 ---
 
 ## 🧪 Notebook pipeline
 
-| # | Notebook | Purpose | Runtime |
-|---|---|---|---|
-| 01 | `data_cleaning` | Text normalisation, near-duplicate detection, train/val/test export | CPU, ~2 min |
-| 02 | `classical_ml_benchmark` | TF-IDF + LinearSVC, **Nested CV**, champion selection | CPU, ~15 min |
-| 02b | `smote_sensitivity` | Tests whether oversampling improves recall on critical classes | CPU, ~5 min |
-| 03 | `transformers_benchmark` | BERT base + MentalBERT, fair head-to-head with the classical baseline | **GPU recommended** |
-| 04 | `clinical_evaluation` | Per-class confusion matrices, error analysis, clinical review tables | CPU, ~3 min |
-| 05 | `deployment_mvp` | LLM perspectives, MVP wiring | CPU, ~2 min |
+| #   | Notebook                    | Purpose                                                        | Runtime          |
+| --- | --------------------------- | -------------------------------------------------------------- | ---------------- |
+| 01  | `data_cleaning`             | Text normalisation, near-duplicate detection, train/val/test export | CPU, ~2 min |
+| 02  | `classical_ml_benchmark`    | TF-IDF + LinearSVC, **Nested CV**, champion selection          | CPU, ~15 min     |
+| 02b | `smote_sensitivity`         | Tests whether oversampling improves recall on critical classes | CPU, ~5 min      |
+| 03  | `transformers_benchmark`    | BERT base + MentalBERT, fair head-to-head with the classical baseline | **GPU recommended** |
+| 04  | `clinical_evaluation`       | Per-class confusion matrices, error analysis, clinical review tables | CPU, ~3 min |
+| 05  | `deployment_mvp`            | LLM perspectives, MVP wiring                                   | CPU, ~2 min      |
 
 > Run 03 and 05 on Google Colab via the badge at the top of each notebook.
 
@@ -317,23 +397,39 @@ mental-health-intelligence/
 - **Data provenance.** The training data is derived from publicly available text; no clinical records were used. The model **has not been validated on clinical populations** and is not certified for clinical use.
 - **Bias.** As with any text classifier, performance varies across demographics, dialects, and clinical sub-populations. The error analysis in notebook 04 surfaces these gaps; do not deploy without re-validating on your population.
 
+See [`NOTICE.md`](NOTICE.md) for the full non-diagnostic notice.
+
+---
+
+## 🗺 Roadmap
+
+- [ ] Add ONNX export of the LinearSVC champion for sub-millisecond serving
+- [ ] Containerised CI matrix across Python 3.10 / 3.11 / 3.12
+- [ ] Multilingual support — Portuguese / Spanish text triage
+- [ ] Calibrated probability outputs (Platt / isotonic) on the `Predictions` page
+- [ ] Hugging Face Spaces public demo
+- [ ] Drift monitoring page wired to a pseudo-production stream
+
 ---
 
 ## 🤝 Contributing
 
 This is a portfolio project, but issues and PRs are welcome. Please:
+
 1. Run `pytest -v` and `ruff check .` before opening a PR.
 2. Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`).
 3. If you touch a notebook, run `nbstripout <file>.ipynb` to avoid bloating diffs with execution outputs.
+4. CI must pass green before review.
 
 ---
 
-## 👥 Authors
+## 👤 Author
 
-**Ana Gouveia ** — DSFS-OD-14 cohort
+**Ana Gouveia** — DSFS-OD-14 cohort
+[GitHub @anafiiliipa-dev](https://github.com/anafiiliipa-dev)
 
 ---
 
 ## 📄 License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). Non-diagnostic notice in [NOTICE.md](NOTICE.md).
