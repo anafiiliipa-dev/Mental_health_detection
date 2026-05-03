@@ -1,0 +1,2 @@
+champion_model,text_variant,f1_macro,recall_macro,critical_recall
+LinearSVC_balanced,raw,0.778927,0.778686,0.698068
