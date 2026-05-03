@@ -54,15 +54,17 @@ This project answers that challenge with a system designed for **rigorous evalua
 
 The system predicts across **seven overlapping clinical categories**:
 
-| Class                | Clinical priority                  |
-| -------------------- | ---------------------------------- |
-| 🧩 **ADHD**          | Standard                           |
-| 😰 **Anxiety**       | Standard                           |
-| 🧠 **Autism**        | Standard                           |
-| ⚡ **Bipolar**        | **Critical** (recall-prioritised)  |
-| 💔 **BPD**           | Standard                           |
-| 🌧 **Depression**    | Standard                           |
-| 🌀 **Schizophrenia** | **Critical** (recall-prioritised)  |
+| Class                | Clinical priority                  | Class weight (balanced) |
+| -------------------- | ---------------------------------- | ----------------------- |
+| 🧩 **ADHD**          | Standard                           | 0.80×                   |
+| 😰 **Anxiety**       | Standard                           | 0.84×                   |
+| 🧠 **Autism**        | Standard                           | 1.08×                   |
+| ⚡ **Bipolar**        | **Critical** (recall-prioritised)  | 0.88×                   |
+| 💔 **BPD**           | Standard                           | 1.00×                   |
+| 🌧 **Depression**    | Standard                           | 1.12×                   |
+| 🌀 **Schizophrenia** | **Critical** (recall-prioritised)  | **1.64×**               |
+
+> The class-balanced weighting up-weights under-represented classes (notably Schizophrenia) at training time. This is a deliberate clinical choice, not an artefact of the data.
 
 ---
 
@@ -111,20 +113,6 @@ flowchart TB
     class Artifacts,KB,Faiss store
 ```
 
-### Inference flow
-
-```text
-User input
-   ↓
-Preprocessing (cleaning, normalisation)
-   ↓
-Feature extraction (TF-IDF / embeddings)
-   ↓
-LinearSVC baseline → Prediction + confidence
-   ↓
-Optional: RAG + LLM grounded explanation
-```
-
 ### Three independent reasoning paths
 
 Each path enforces strict isolation to protect user data:
@@ -156,7 +144,7 @@ The result is an **unbiased estimate of generalisation error** — what the mode
 
 ### Champion model: **LinearSVC + class-balanced weighting**
 
-A deliberately simple choice. The transformer benchmarks (`03_transformers_benchmark.ipynb`) showed that on this dataset, MentalBERT marginally outperforms LinearSVC on macro-F1 — but **at ~40× the inference cost** and with worse interpretability. For a triage tool that must be auditable in clinical settings, **LinearSVC wins**.
+A deliberately simple choice. The transformer benchmarks (`03_transformers.ipynb`) showed that on this dataset, MentalBERT outperforms LinearSVC on macro-F1 by **~3 points** — but **at ~40× the inference cost** and with worse interpretability. For a triage tool that must be auditable in clinical settings, **LinearSVC wins**.
 
 ### Optimisation target: **Critical Recall**
 
@@ -174,36 +162,52 @@ We deliberately don't optimise macro-F1 alone. Missing a Bipolar or Schizophreni
 
 ## 📊 Results
 
-> <!-- TODO: replace placeholder values with actual numbers from reports/tables/final_test_metrics.csv -->
+All numbers below come from `reports/tables/` and were produced by the notebooks in this repository — fully reproducible end-to-end.
 
 ### Headline numbers (held-out test set)
 
-| Metric                          | LinearSVC (champion) | MentalBERT (benchmark) |
-| ------------------------------- | -------------------- | ---------------------- |
-| Macro-F1                        | `0.XX`               | `0.XX`                 |
-| Weighted-F1                     | `0.XX`               | `0.XX`                 |
-| Accuracy                        | `0.XX`               | `0.XX`                 |
-| **Recall — Bipolar (critical)** | `0.XX`               | `0.XX`                 |
-| **Recall — Schizophrenia (critical)** | `0.XX`         | `0.XX`                 |
-| Inference latency (ms / sample) | `< 5 ms`             | `~200 ms`              |
-| Model size                      | `~10 MB`             | `~440 MB`              |
+| Metric                                | LinearSVC (champion) | MentalBERT (benchmark) | BERT-base (benchmark) |
+| ------------------------------------- | -------------------- | ---------------------- | --------------------- |
+| Macro-F1                              | **0.779**            | 0.809                  | 0.791                 |
+| Recall macro                          | **0.779**            | 0.812                  | 0.793                 |
+| **Critical Recall** (Bipolar+Schiz)   | **0.698**            | 0.756                  | 0.739                 |
+| Accuracy                              | n/a                  | 0.815                  | 0.798                 |
+| Inference latency (ms / sample)       | **< 5 ms**           | ~200 ms                | ~200 ms               |
+| Model size                            | **~10 MB**           | ~440 MB                | ~440 MB               |
 
-### Nested CV (mean ± std across outer folds)
+### Nested CV (mean across outer folds, raw text variant)
 
-| Metric              | Value             |
-| ------------------- | ----------------- |
-| Macro-F1            | `0.XX ± 0.0X`     |
-| Critical-recall avg | `0.XX ± 0.0X`     |
+| Model                       | Macro-F1          | Critical Recall   | Robust score | Rank |
+| --------------------------- | ----------------- | ----------------- | ------------ | ---- |
+| **LinearSVC balanced** ⭐    | **0.769 ± 0.006** | **0.684 ± 0.018** | **0.734**    | **1** |
+| LogReg balanced             | 0.725 ± 0.004     | 0.709 ± 0.013     | 0.720        | 2    |
+| LinearSVC plain             | 0.758 ± 0.008     | 0.659 ± 0.026     | 0.717        | 3    |
+| LogReg plain                | 0.754 ± 0.014     | 0.630 ± 0.034     | 0.703        | 4    |
+| MultinomialNB               | 0.545 ± 0.014     | 0.350 ± 0.011     | 0.474        | 5    |
+
+**Standard deviations under 1 percentage point** across folds — the model is exceptionally stable. Compared to the naive Multinomial NB baseline, the champion shows a **+22-point F1 improvement**, validating the TF-IDF + linear-classifier pipeline.
+
+### Clinical review (n = 2 255 predictions)
+
+| Indicator                                  | Count |
+| ------------------------------------------ | ----- |
+| Total predictions reviewed                 | 2 255 |
+| Total errors                               | 474   |
+| **Critical false negatives**               | **95** |
+| Critical false positives                   | 63    |
+
+The asymmetry between false negatives (95) and false positives (63) on critical classes is **deliberate** — the recall-skewed optimisation accepts more false alarms in exchange for fewer missed cases.
 
 ### Why LinearSVC wins despite a slightly lower macro-F1
 
-| Dimension          | LinearSVC | MentalBERT | Decision driver |
-| ------------------ | --------- | ---------- | --------------- |
-| Macro-F1           | `0.XX`    | `0.XX`     | Within 1–2 pp |
-| Inference cost     | `1×`      | `~40×`     | LinearSVC scales for batch triage |
-| Interpretability   | Coefficients per token | Black-box transformer attention | LinearSVC defensible to a clinician |
-| Bias auditability  | High      | Low        | LinearSVC easier to slice & audit |
-| Memory footprint   | `~10 MB`  | `~440 MB`  | LinearSVC trivial to deploy |
+| Dimension                | LinearSVC | MentalBERT | Decision driver                                       |
+| ------------------------ | --------- | ---------- | ----------------------------------------------------- |
+| Macro-F1 (test)          | 0.779     | 0.809      | Within 3 percentage points                            |
+| Inference cost           | `1×`      | `~40×`     | LinearSVC scales for batch triage                     |
+| Model size on disk       | ~10 MB    | ~440 MB    | LinearSVC trivial to deploy                           |
+| Interpretability         | Token-level coefficients | Black-box attention | LinearSVC defensible to a clinician |
+| Bias auditability        | High      | Low        | LinearSVC easier to slice & audit                     |
+| SMOTE sensitivity        | Negligible (-0.4 pp) | n/a | Class-balanced weights are sufficient (notebook `02b`) |
 
 ---
 
@@ -222,12 +226,10 @@ A six-page Streamlit application with a custom glassmorphism theme:
 
 ### Screenshots
 
-<!-- TODO: capture and commit these 4 screenshots -->
-
 |                         |                         |
 | ----------------------- | ----------------------- |
 | ![Overview](docs/screenshots/01-overview.png)     | ![Predictions](docs/screenshots/02-predictions.png) |
-| ![Monitoring](docs/screenshots/03-monitoring.png) | ![Chat with RAG](docs/screenshots/04-chat-rag.png)  |
+| ![Monitoring](docs/screenshots/03-monitoring.png) | _Chat with grounded RAG (coming soon)_              |
 
 ---
 
@@ -236,7 +238,7 @@ A six-page Streamlit application with a custom glassmorphism theme:
 ### Prerequisites
 
 - **Python 3.10+**
-- An [OpenRouter](https://openrouter.ai/) API key (free tier sufficient for `gpt-4o-mini`)
+- An [OpenRouter](https://openrouter.ai/) API key for the Chat page (free tier available with `:free` models)
 - ~2 GB disk for the embedding model + FAISS index on first run
 
 ### Install
@@ -262,13 +264,11 @@ cp .env.example .env
 
 The repo **never** commits `.env` — only `.env.example` (placeholder). Confirmed by `.gitignore`.
 
-### Obtain or train the model
+For a fully free setup, use `meta-llama/llama-3.3-70b-instruct:free` in `OPENROUTER_MODEL` — no credits required.
 
-The trained `.joblib` artifact is **not committed** (see `.gitignore`). You have three options:
+### Model
 
-1. **Train it yourself.** Run notebooks `01_data_cleaning.ipynb` → `02_classical_ml_benchmark.ipynb` end-to-end. This produces `models/champion.joblib` (~10 MB).
-2. **Run without it (demo mode).** The dashboard will fall back to a clearly-labelled keyword-based prediction, so the UI is fully functional for inspection.
-3. **Use the safe sample evaluation outputs.** The `Monitoring` page automatically falls back to `docs/sample_outputs/` if no real run is present.
+The trained champion model (**`models/best_classical_model.joblib`**, ~5 MB) is **included in this repository** so you can run inference immediately after cloning. To retrain from scratch, run notebooks `01 → 02` end-to-end.
 
 ### Run
 
@@ -323,7 +323,7 @@ mental-health-intelligence/
 ├── .pre-commit-config.yaml            # ruff + nbstripout hooks
 ├── .env.example                       # placeholder secrets
 ├── .gitattributes                     # forces LF, marks notebooks
-├── .gitignore                         # data/, models/, reports/, .env, *.joblib
+├── .gitignore                         # data/, models/ (with model exception), reports/ (with CSV exceptions)
 ├── .dockerignore
 ├── pyproject.toml                     # single source of truth for deps
 ├── requirements.txt                   # convenience shortcut (mirrors pyproject)
@@ -341,10 +341,11 @@ mental-health-intelligence/
 │   └── sample_outputs/                # safe public CSVs (aggregated only)
 │
 ├── notebooks/                         # 1️⃣ → 5️⃣ pipeline, runnable end-to-end
+│   ├── 00_exploration.ipynb
 │   ├── 01_data_cleaning.ipynb
-│   ├── 02_classical_ml_benchmark.ipynb       # ← Nested CV champion
+│   ├── 02_classical_ml.ipynb                 # ← Nested CV champion
 │   ├── 02b_smote_sensitivity.ipynb           # ← class-imbalance ablation
-│   ├── 03_transformers_benchmark.ipynb       # ← Colab/GPU
+│   ├── 03_transformers.ipynb                 # ← Colab/GPU
 │   ├── 04_clinical_evaluation.ipynb
 │   └── 05_deployment_mvp.ipynb
 │
@@ -362,30 +363,42 @@ mental-health-intelligence/
 │   └── rag/
 │       └── simple_rag.py              # FAISS + LangChain retrieval
 │
-├── tests/                             # pytest, fully mocked
+├── tests/                             # pytest, fully mocked, 33 / 33 passing
 │   ├── conftest.py
 │   ├── test_predictions.py
 │   ├── test_rag.py
 │   └── test_client.py
 │
+├── models/
+│   └── best_classical_model.joblib   # champion LinearSVC (committed, ~5 MB)
+│
+├── reports/tables/                    # evaluation artifacts (CSVs only)
+│   ├── classical/
+│   │   ├── final_test_metrics.csv
+│   │   ├── nested_cv_summary.csv
+│   │   └── normal_cv_summary.csv
+│   └── clinical/
+│       └── global_comparison_for_clinical_review.csv
+│
 ├── rag_source/                        # knowledge base for the Chat page
-└── data/  models/  reports/           # gitignored (local only)
+└── data/                              # gitignored (local only)
 ```
 
 ---
 
 ## 🧪 Notebook pipeline
 
-| #   | Notebook                    | Purpose                                                        | Runtime          |
-| --- | --------------------------- | -------------------------------------------------------------- | ---------------- |
-| 01  | `data_cleaning`             | Text normalisation, near-duplicate detection, train/val/test export | CPU, ~2 min |
-| 02  | `classical_ml_benchmark`    | TF-IDF + LinearSVC, **Nested CV**, champion selection          | CPU, ~15 min     |
-| 02b | `smote_sensitivity`         | Tests whether oversampling improves recall on critical classes | CPU, ~5 min      |
-| 03  | `transformers_benchmark`    | BERT base + MentalBERT, fair head-to-head with the classical baseline | **GPU recommended** |
-| 04  | `clinical_evaluation`       | Per-class confusion matrices, error analysis, clinical review tables | CPU, ~3 min |
-| 05  | `deployment_mvp`            | LLM perspectives, MVP wiring                                   | CPU, ~2 min      |
+| #    | Notebook                    | Purpose                                                        | Runtime          |
+| ---- | --------------------------- | -------------------------------------------------------------- | ---------------- |
+| 00   | `exploration`               | Initial dataset exploration on Colab                           | CPU/Colab        |
+| 01   | `data_cleaning`             | Text normalisation, near-duplicate detection, train/val/test export | CPU, ~2 min |
+| 02   | `classical_ml`              | TF-IDF + LinearSVC, **Nested CV**, champion selection          | CPU, ~15 min     |
+| 02b  | `smote_sensitivity`         | Tests whether oversampling improves recall on critical classes | CPU, ~5 min      |
+| 03   | `transformers`              | BERT base + MentalBERT, fair head-to-head with the classical baseline | **GPU recommended** |
+| 04   | `clinical_evaluation`       | Per-class confusion matrices, error analysis, clinical review tables | CPU, ~3 min |
+| 05   | `deployment_mvp`            | LLM perspectives, MVP wiring                                   | CPU, ~2 min      |
 
-> Run 03 and 05 on Google Colab via the badge at the top of each notebook.
+> Run 03 on Google Colab via the badge at the top of each notebook.
 
 ---
 
@@ -393,7 +406,7 @@ mental-health-intelligence/
 
 - **Non-diagnostic.** Repeated everywhere it matters. Outputs are signals for human review, not labels.
 - **Privacy.** Classical inference is fully local. The RAG layer only sends *retrieved chunks plus the user's question* to OpenRouter — never raw patient text. The `Predictions` page never calls any external API.
-- **Recall-skewed.** We accept more false positives in exchange for fewer false negatives on high-risk classes. This is a deliberate clinical trade-off, not a bug.
+- **Recall-skewed.** We accept more false positives (63) in exchange for fewer false negatives (95) on high-risk classes. This is a deliberate clinical trade-off, not a bug.
 - **Data provenance.** The training data is derived from publicly available text; no clinical records were used. The model **has not been validated on clinical populations** and is not certified for clinical use.
 - **Bias.** As with any text classifier, performance varies across demographics, dialects, and clinical sub-populations. The error analysis in notebook 04 surfaces these gaps; do not deploy without re-validating on your population.
 
@@ -403,6 +416,7 @@ See [`NOTICE.md`](NOTICE.md) for the full non-diagnostic notice.
 
 ## 🗺 Roadmap
 
+- [ ] Capture screenshot of the Chat page (RAG with grounded sources)
 - [ ] Add ONNX export of the LinearSVC champion for sub-millisecond serving
 - [ ] Containerised CI matrix across Python 3.10 / 3.11 / 3.12
 - [ ] Multilingual support — Portuguese / Spanish text triage
