@@ -12,7 +12,7 @@ from pathlib import Path
 # Root anchors
 # ============================================================
 
-PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
+PROJECT_ROOT: Path = Path(__file__).resolve().parents[3]
 SRC_DIR: Path = PROJECT_ROOT / "src"
 SAMPLE_OUTPUTS_DIR: Path = PROJECT_ROOT / "docs" / "sample_outputs"
 
