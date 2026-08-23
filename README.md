@@ -352,9 +352,7 @@ mental-health-intelligence/
 ├── src/mental_health/                 # installable package
 │   ├── __init__.py
 │   ├── app/
-│   │   ├── app.py                     # Streamlit entry point
-│   │   ├── pages/                     # one module per dashboard page
-│   │   ├── styles.py                  # custom CSS (glassmorphism)
+│   │   ├── app.py                     # Streamlit entry point (CSS + all pages, single file)
 │   │   └── openrouter_client.py
 │   ├── config/
 │   │   └── paths.py                   # centralised path constants
@@ -364,7 +362,6 @@ mental-health-intelligence/
 │       └── simple_rag.py              # FAISS + LangChain retrieval
 │
 ├── tests/                             # pytest, fully mocked, 33 / 33 passing
-│   ├── conftest.py
 │   ├── test_predictions.py
 │   ├── test_rag.py
 │   └── test_client.py
