@@ -21,7 +21,10 @@ SAMPLE_OUTPUTS_DIR: Path = PROJECT_ROOT / "docs" / "sample_outputs"
 # ============================================================
 
 DATA_DIR: Path = PROJECT_ROOT / "data"
+DATA_RAW_DIR: Path = DATA_DIR / "raw"
 DATA_CLEAN_DIR: Path = DATA_DIR / "clean"
+
+RAW_DATA_PATH: Path = DATA_RAW_DIR / "Mental Health Disorder Detection Dataset.csv"
 DEFAULT_CLEAN_DATA_PATH: Path = DATA_CLEAN_DIR / "mental_health_detection_clean.csv"
 
 # ============================================================
