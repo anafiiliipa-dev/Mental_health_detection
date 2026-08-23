@@ -190,6 +190,7 @@ ignore = [
 "tests/*" = ["B", "SIM", "N", "F841", "RUF059"]        # tests legitimately use patterns flagged in src code
 "src/mental_health/app/app.py" = ["E402", "N806", "B905", "SIM117"]  # sys.path tweak; UPPER_CASE locals are private constants
 "src/mental_health/models/services.py" = ["N806"]      # _UPPER_CASE locals are private constants by convention
+"src/mental_health/train/benchmark.py" = ["N803", "N806"]  # X_train/X_dev is the standard sklearn matrix convention
 "notebooks/*" = ["ALL"]
 
 [tool.ruff.format]

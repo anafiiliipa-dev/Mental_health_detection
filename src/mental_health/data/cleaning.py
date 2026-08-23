@@ -22,6 +22,12 @@ Corrections applied relative to the original notebook (see
 4. Near-empty texts (fewer than ``MIN_BODY_LENGTH`` characters) are
    filtered out as noise. Long texts are deliberately kept — they are
    verbose but legitimate posts, not noise.
+5. The ``body_masked`` column (diagnostic/medication terms replaced with
+   ``[CONDITION]``, used as the leakage-robustness text variant in
+   training) is added at the end of the pipeline, via
+   ``mental_health.data.masking``. Behaviourally identical to the
+   notebook's masking logic — only the label-casing fix above changes
+   which text variant ends up selected as champion downstream.
 
 Near-duplicate detection (MinHash/LSH) is intentionally NOT included here.
 It is real, useful work already prototyped in ``00_exploration.ipynb``, but
@@ -36,6 +42,7 @@ from pathlib import Path
 import pandas as pd
 
 from mental_health.config.paths import DEFAULT_CLEAN_DATA_PATH, RAW_DATA_PATH
+from mental_health.data.masking import add_masked_column
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +52,7 @@ logger = logging.getLogger(__name__)
 
 TEXT_COL = "body"
 TARGET_COL = "category"
+MASKED_COL = "body_masked"
 REQUIRED_COLUMNS = [TEXT_COL, TARGET_COL]
 
 # Minimum text length (characters, after stripping) to keep a row.
@@ -188,6 +196,7 @@ def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
     df = drop_exact_duplicates(df)
     df = drop_label_conflicts(df)
     df = filter_short_texts(df)
+    df = add_masked_column(df, text_col=TEXT_COL, masked_col=MASKED_COL)
 
     df = df.reset_index(drop=True)
     logger.info("Cleaning pipeline complete: %d rows remaining", len(df))
@@ -198,6 +207,10 @@ def run(input_path: Path = RAW_DATA_PATH, output_path: Path = DEFAULT_CLEAN_DATA
     """Load, clean and export the dataset. Returns the cleaned dataframe."""
     df_raw = load_raw_dataset(input_path)
     df_clean = clean_dataset(df_raw)
+
+    # Fixed column order (body, body_masked, category), matching the
+    # original notebook's export format.
+    df_clean = df_clean[[TEXT_COL, MASKED_COL, TARGET_COL]]
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df_clean.to_csv(output_path, index=False)

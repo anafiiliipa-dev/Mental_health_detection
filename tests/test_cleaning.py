@@ -203,6 +203,14 @@ class TestCleanDataset:
         out = clean_dataset(df)
         assert out.isnull().sum().sum() == 0
 
+    def test_result_has_masked_column(self):
+        df = pd.DataFrame(
+            {"body": ["I take lithium every day for my mood"], "category": ["bipolar"]}
+        )
+        out = clean_dataset(df)
+        assert "body_masked" in out.columns
+        assert "lithium" not in out["body_masked"].iloc[0].lower()
+
     def test_result_index_is_reset(self):
         df = pd.DataFrame(
             {
