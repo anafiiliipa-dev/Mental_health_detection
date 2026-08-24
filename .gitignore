@@ -112,5 +112,12 @@ Desktop.ini
 # ============================================================
 faiss_index/
 
+# ============================================================
+# MLflow local tracking store (Phase 3) — machine-local, never committed.
+# Will move to a shared Postgres + S3 backend in Phase 7 (Docker).
+# ============================================================
+mlruns/
+mlflow.db
+
 # Internal audit notes (not for public repo)
 AUDIT.md

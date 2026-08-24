@@ -100,9 +100,14 @@ dev = [
     "pre-commit>=3.7",
 ]
 
+# ---- MLflow tracking/registry (training pipeline, Phase 3+) ----
+mlflow = [
+    "mlflow>=2.14",
+]
+
 # ---- Everything (dashboard + heavy notebooks + dev tooling) ----
 all = [
-    "mental-health-intelligence[streamlit,transformers,nlp,dev]",
+    "mental-health-intelligence[streamlit,transformers,nlp,dev,mlflow]",
 ]
 
 [project.urls]
@@ -191,6 +196,7 @@ ignore = [
 "src/mental_health/app/app.py" = ["E402", "N806", "B905", "SIM117"]  # sys.path tweak; UPPER_CASE locals are private constants
 "src/mental_health/models/services.py" = ["N806"]      # _UPPER_CASE locals are private constants by convention
 "src/mental_health/train/benchmark.py" = ["N803", "N806"]  # X_train/X_dev is the standard sklearn matrix convention
+"src/mental_health/train/train.py" = ["N806"]          # X_train/X_test is the standard sklearn matrix convention
 "notebooks/*" = ["ALL"]
 
 [tool.ruff.format]
