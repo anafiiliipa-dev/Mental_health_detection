@@ -60,7 +60,14 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-from mental_health.config.paths import DEFAULT_CLEAN_DATA_PATH, PROJECT_ROOT
+from mental_health.config.mlflow_config import (
+    MLFLOW_ARTIFACT_ROOT,
+    MLFLOW_EXPERIMENT_NAME,
+    MLFLOW_REGISTERED_MODEL_NAME,
+    MLFLOW_TRACKING_URI,
+    STAGING_ALIAS,
+)
+from mental_health.config.paths import DEFAULT_CLEAN_DATA_PATH
 from mental_health.data.cleaning import MASKED_COL, TARGET_COL, TEXT_COL
 from mental_health.train.benchmark import run_nested_cv_benchmark
 from mental_health.train.champion import (
@@ -77,14 +84,10 @@ from mental_health.train.model_registry import (
 
 logger = logging.getLogger(__name__)
 
-MLFLOW_TRACKING_URI = f"sqlite:///{PROJECT_ROOT / 'mlflow.db'}"
-MLFLOW_ARTIFACT_ROOT = f"file:{PROJECT_ROOT / 'mlruns'}"
-MLFLOW_EXPERIMENT_NAME = "mental_health_classical_ml"
-
-# Model Registry: every champion trained by this script is registered under
-# this name and immediately aliased "staging" — never "production" directly.
-# Promotion to "production" is a separate, explicit decision (see promote.py).
-MLFLOW_REGISTERED_MODEL_NAME = "mental_health_classifier"
+# MLFLOW_TRACKING_URI, MLFLOW_ARTIFACT_ROOT, MLFLOW_EXPERIMENT_NAME and
+# MLFLOW_REGISTERED_MODEL_NAME live in mental_health.config.mlflow_config —
+# the single source of truth shared with promote.py and the FastAPI service
+# (Phase 6), so serving code doesn't need to import this training module.
 TEST_SIZE = 0.2
 TEXT_VARIANTS = ["raw", "masked"]
 VARIANT_COLUMNS = {"raw": TEXT_COL, "masked": MASKED_COL}
@@ -227,7 +230,7 @@ def run_champion_stage(nested_summary: pd.DataFrame, nested_outputs: dict, split
         # promote.py explicitly moves it to "production".
         client = mlflow.MlflowClient()
         client.set_registered_model_alias(
-            MLFLOW_REGISTERED_MODEL_NAME, "staging", model_info.registered_model_version
+            MLFLOW_REGISTERED_MODEL_NAME, STAGING_ALIAS, model_info.registered_model_version
         )
 
         logger.info(

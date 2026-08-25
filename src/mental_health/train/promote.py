@@ -34,12 +34,15 @@ import logging
 import mlflow
 from mlflow.exceptions import MlflowException
 
-from mental_health.train.train import MLFLOW_REGISTERED_MODEL_NAME, MLFLOW_TRACKING_URI
+from mental_health.config.mlflow_config import (
+    MLFLOW_REGISTERED_MODEL_NAME,
+    MLFLOW_TRACKING_URI,
+    PRODUCTION_ALIAS,
+    STAGING_ALIAS,
+)
 
 logger = logging.getLogger(__name__)
 
-STAGING_ALIAS = "staging"
-PRODUCTION_ALIAS = "production"
 GATED_METRICS = ["f1_macro", "critical_recall"]
 
 
