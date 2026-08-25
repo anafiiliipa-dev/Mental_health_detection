@@ -37,6 +37,15 @@ than silently ported:
 4. **Dataset hash logged as an MLflow param** (SHA256, first 16 chars) —
    the audit's Étape F recommendation, giving basic dataset-version
    traceability without introducing DVC.
+5. **Model Registry (Phase 5)**: the champion is registered under
+   ``MLFLOW_REGISTERED_MODEL_NAME`` and aliased ``"staging"`` on every run —
+   never ``"production"`` directly. Promotion is a separate, explicit
+   decision made by ``promote.py`` against documented thresholds, not an
+   automatic or manual UI action (per the audit's governance
+   recommendation: "qui a le droit de promouvoir un modèle ?"). Stages
+   (MLflow's older mechanism) are deprecated as of MLflow 2.9 in favour of
+   aliases, so this uses aliases directly rather than building on an
+   API already scheduled for removal.
 """
 from __future__ import annotations
 
@@ -71,6 +80,11 @@ logger = logging.getLogger(__name__)
 MLFLOW_TRACKING_URI = f"sqlite:///{PROJECT_ROOT / 'mlflow.db'}"
 MLFLOW_ARTIFACT_ROOT = f"file:{PROJECT_ROOT / 'mlruns'}"
 MLFLOW_EXPERIMENT_NAME = "mental_health_classical_ml"
+
+# Model Registry: every champion trained by this script is registered under
+# this name and immediately aliased "staging" — never "production" directly.
+# Promotion to "production" is a separate, explicit decision (see promote.py).
+MLFLOW_REGISTERED_MODEL_NAME = "mental_health_classifier"
 TEST_SIZE = 0.2
 TEXT_VARIANTS = ["raw", "masked"]
 VARIANT_COLUMNS = {"raw": TEXT_COL, "masked": MASKED_COL}
@@ -204,14 +218,28 @@ def run_champion_stage(nested_summary: pd.DataFrame, nested_outputs: dict, split
             mlflow.log_artifact(str(tmp_dir / "classification_report.csv"))
             mlflow.log_artifact(str(tmp_dir / "confusion_matrix.csv"))
 
-        mlflow.sklearn.log_model(final_model, name="model")
+        model_info = mlflow.sklearn.log_model(
+            final_model, name="model", registered_model_name=MLFLOW_REGISTERED_MODEL_NAME
+        )
+
+        # Every newly trained model is registered and aliased "staging" —
+        # available for review/comparison, but never serving traffic until
+        # promote.py explicitly moves it to "production".
+        client = mlflow.MlflowClient()
+        client.set_registered_model_alias(
+            MLFLOW_REGISTERED_MODEL_NAME, "staging", model_info.registered_model_version
+        )
 
         logger.info(
             "Champion final metrics — f1_macro=%.4f, recall_macro=%.4f, critical_recall=%.4f",
             eval_result["f1_macro"], eval_result["recall_macro"], eval_result["critical_recall"],
         )
+        logger.info(
+            "Registered as '%s' version %s, aliased 'staging'",
+            MLFLOW_REGISTERED_MODEL_NAME, model_info.registered_model_version,
+        )
 
-    return final_model, champion_config, eval_result
+    return final_model, champion_config, eval_result, model_info.registered_model_version
 
 
 def run(data_path: Path = DEFAULT_CLEAN_DATA_PATH) -> dict:
@@ -227,18 +255,22 @@ def run(data_path: Path = DEFAULT_CLEAN_DATA_PATH) -> dict:
     splits = build_splits(df)
 
     nested_summary, nested_outputs = run_benchmark_stage(splits, dataset_hash)
-    final_model, champion_config, eval_result = run_champion_stage(nested_summary, nested_outputs, splits, dataset_hash)
+    final_model, champion_config, eval_result, registered_version = run_champion_stage(
+        nested_summary, nested_outputs, splits, dataset_hash
+    )
 
     logger.info(
-        "Training complete. Champion: %s / %s | f1_macro=%.4f | critical_recall=%.4f",
+        "Training complete. Champion: %s / %s | f1_macro=%.4f | critical_recall=%.4f | registry_version=%s",
         champion_config["model_name"], champion_config["text_variant"],
-        eval_result["f1_macro"], eval_result["critical_recall"],
+        eval_result["f1_macro"], eval_result["critical_recall"], registered_version,
     )
 
     return {
         "champion_config": champion_config,
         "eval_result": eval_result,
         "model": final_model,
+        "registered_model_name": MLFLOW_REGISTERED_MODEL_NAME,
+        "registered_version": registered_version,
     }
 
 

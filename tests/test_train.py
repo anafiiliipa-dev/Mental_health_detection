@@ -4,6 +4,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import mlflow
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -115,3 +116,8 @@ class TestRunEndToEnd:
         assert 0.0 <= result["eval_result"]["f1_macro"] <= 1.0
         assert (tmp_path / "mlflow.db").exists(), "MLflow SQLite tracking store was not created"
         assert (tmp_path / "mlruns").exists(), "MLflow artifact store was not created"
+
+        assert result["registered_version"] is not None
+        client = mlflow.MlflowClient()
+        staged = client.get_model_version_by_alias(result["registered_model_name"], "staging")
+        assert staged.version == result["registered_version"]
