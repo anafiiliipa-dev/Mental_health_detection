@@ -105,9 +105,15 @@ mlflow = [
     "mlflow>=2.14",
 ]
 
+# ---- Serving API (Phase 6) ----
+api = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+]
+
 # ---- Everything (dashboard + heavy notebooks + dev tooling) ----
 all = [
-    "mental-health-intelligence[streamlit,transformers,nlp,dev,mlflow]",
+    "mental-health-intelligence[streamlit,transformers,nlp,dev,mlflow,api]",
 ]
 
 [project.urls]
