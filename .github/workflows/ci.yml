@@ -15,6 +15,6 @@ jobs:
       with:
         python-version: 3.12
 
-    - run: pip install -e ".[dev,mlflow]"
+    - run: pip install -e ".[dev,mlflow,api,rag]"
     - run: ruff check .
     - run: pytest -v

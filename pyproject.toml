@@ -95,6 +95,9 @@ dev = [
     "ruff>=0.4",
     "nbstripout>=0.7",
     "pre-commit>=3.7",
+    # Required by fastapi.testclient.TestClient (tests/test_main.py) — not
+    # a runtime dependency of the API itself, only of the test suite.
+    "httpx2>=0.28",
 ]
 
 # ---- MLflow tracking/registry (training pipeline, Phase 3+) ----
