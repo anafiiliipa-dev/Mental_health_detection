@@ -117,9 +117,16 @@ faiss_index/
 # Stays SQLite through Phase 7 (Docker): the container mounts these as a
 # volume rather than baking them into the image. A shared Postgres + S3
 # backend is deferred to Phase 13 (AWS) — no reason to bring AWS forward.
+#
+# Docker gets its OWN store (mlflow-docker.db / mlruns-docker/), separate
+# from the host's mlflow.db/mlruns — MLflow's file artifact store bakes
+# in an absolute host path at creation time, which a different OS/root
+# (the Linux container) can never resolve. See docker-compose.yml.
 # ============================================================
 mlruns/
 mlflow.db
+mlruns-docker/
+mlflow-docker.db
 
 # Internal audit notes (not for public repo)
 AUDIT.md

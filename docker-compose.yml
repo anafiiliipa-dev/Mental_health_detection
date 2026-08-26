@@ -1,12 +1,30 @@
 # Convenience wrapper around `docker build` + `docker run` for local dev.
-# Mounts the real mlflow.db/mlruns from the host so the containerized API
-# serves whatever model is currently aliased "production" on this machine
-# — no separate model bundled into the image.
+#
+# Uses a Docker-only MLflow store (mlflow-docker.db / mlruns-docker/),
+# separate from the mlflow.db/mlruns used for host-side dev (`uvicorn
+# --reload` on Windows). Reason: MLflow's file-based artifact store bakes
+# in the ABSOLUTE path of wherever the experiment was created — a
+# Windows path (C:\Users\...) is meaningless inside the Linux container,
+# so a store created on the host can never be read correctly from
+# inside Docker (or vice versa). Two separate stores, each internally
+# consistent, avoids that entirely — no code change needed, no AWS
+# brought forward. A shared, environment-independent store (S3 artifact
+# backend) is exactly what Phase 13 will provide properly.
+#
+# First time: populate the Docker store by running training + promotion
+# INSIDE the container (see README section below / chat instructions),
+# so the paths it records are container-native from the start.
 services:
   api:
     build: .
     ports:
       - "8000:8000"
     volumes:
-      - ./mlflow.db:/app/mlflow.db
-      - ./mlruns:/app/mlruns
+      - ./mlflow-docker.db:/app/mlflow.db
+      - ./mlruns-docker:/app/mlruns
+      # data/ is deliberately excluded from the image (see .dockerignore —
+      # it's gitignored, never baked into a shippable artifact). Only
+      # needed for the one-off `docker compose run ... train` /
+      # `... promote` commands below; the api service itself never reads
+      # it. Mounted read-only since training only ever reads this CSV.
+      - ./data:/app/data:ro
