@@ -18,3 +18,4 @@ jobs:
     - run: pip install -e ".[dev,mlflow,api,rag]"
     - run: ruff check .
     - run: pytest -v
+    - run: docker build -t mental-health-api .
