@@ -1,21 +1,28 @@
 name: Tests
-
 on:
   push:
   pull_request:
-
 jobs:
   test:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
+      packages: write
     steps:
     - uses: actions/checkout@v3
-
     - uses: actions/setup-python@v4
       with:
         python-version: 3.12
-
     - run: pip install -e ".[dev,mlflow,api,rag]"
     - run: ruff check .
     - run: pytest -v
     - run: docker build -t mental-health-api .
+    - name: Push image to GHCR (main only)
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: |
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        IMAGE=ghcr.io/${{ github.repository_owner }}/mental-health-api
+        docker tag mental-health-api "$IMAGE:latest"
+        docker tag mental-health-api "$IMAGE:${{ github.sha }}"
+        docker push "$IMAGE:latest"
+        docker push "$IMAGE:${{ github.sha }}"
