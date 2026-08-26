@@ -73,12 +73,14 @@ def load_production_model(model_name: str = MLFLOW_REGISTERED_MODEL_NAME) -> Loa
         run = client.get_run(model_version.run_id)
     except (MlflowException, OSError) as exc:
         logger.error("Found '%s' v%s but failed to load it: %s", model_name, model_version.version, exc)
-        return LoadedModel(model=None, version=model_version.version, run_id=model_version.run_id, metrics={}, error=str(exc))
+        return LoadedModel(
+            model=None, version=str(model_version.version), run_id=model_version.run_id, metrics={}, error=str(exc)
+        )
 
     logger.info("Loaded '%s' v%s (run %s) as the production model", model_name, model_version.version, model_version.run_id)
     return LoadedModel(
         model=model,
-        version=model_version.version,
+        version=str(model_version.version),
         run_id=model_version.run_id,
         metrics=dict(run.data.metrics),
         error=None,

@@ -47,7 +47,7 @@ class TestLoadProductionModel:
 
         assert result.is_available is True
         assert result.error is None
-        assert result.version == version
+        assert result.version == str(version)
         assert result.run_id == run_id
         assert result.metrics["f1_macro"] == pytest.approx(0.8)
         # Sanity check it's a real usable estimator, not a stub.
