@@ -1,41 +1,12 @@
-# =============================================================================
-# Mental Health Intelligence — local stack
-# -----------------------------------------------------------------------------
-# One-command run for evaluators:
-#
-#   docker compose up --build
-#
-# Then open http://localhost:8501.
-#
-# Mount strategy:
-#   - models/         → read-only, so the container can't accidentally clobber
-#                        a locally-trained .joblib
-#   - reports/tables/ → read-only, exposes the latest evaluation artifacts
-#                        to the Monitoring page
-#   - faiss_index/    → read-write, persistent FAISS cache between runs
-# =============================================================================
-
+# Convenience wrapper around `docker build` + `docker run` for local dev.
+# Mounts the real mlflow.db/mlruns from the host so the containerized API
+# serves whatever model is currently aliased "production" on this machine
+# — no separate model bundled into the image.
 services:
-  dashboard:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: mental-health-intelligence:latest
-    container_name: mental-health-dashboard
-    restart: unless-stopped
+  api:
+    build: .
     ports:
-      - "8501:8501"
-    environment:
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENROUTER_MODEL:   ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+      - "8000:8000"
     volumes:
-      - ./models:/app/models:ro
-      - ./reports/tables:/app/reports/tables:ro
-      - ./faiss_index:/app/faiss_index
-      - ./docs/sample_outputs:/app/docs/sample_outputs:ro
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8501/_stcore/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
+      - ./mlflow.db:/app/mlflow.db
+      - ./mlruns:/app/mlruns

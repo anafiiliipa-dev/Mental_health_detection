@@ -114,7 +114,9 @@ faiss_index/
 
 # ============================================================
 # MLflow local tracking store (Phase 3) — machine-local, never committed.
-# Will move to a shared Postgres + S3 backend in Phase 7 (Docker).
+# Stays SQLite through Phase 7 (Docker): the container mounts these as a
+# volume rather than baking them into the image. A shared Postgres + S3
+# backend is deferred to Phase 13 (AWS) — no reason to bring AWS forward.
 # ============================================================
 mlruns/
 mlflow.db
