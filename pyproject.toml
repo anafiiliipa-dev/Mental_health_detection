@@ -101,8 +101,14 @@ dev = [
 ]
 
 # ---- MLflow tracking/registry (training pipeline, Phase 3+) ----
+# boto3 is needed only when MLFLOW_ARTIFACT_ROOT points at s3://... (team
+# deployment target, e.g. Cloud Run) — MLflow's S3 artifact backend calls
+# into it internally. Harmless to always install: it's a thin, dependency-
+# light AWS SDK client, and the local-dev default (file:// artifact root)
+# simply never touches it.
 mlflow = [
     "mlflow>=2.14",
+    "boto3>=1.34",
 ]
 
 # ---- Serving API (Phase 6) ----

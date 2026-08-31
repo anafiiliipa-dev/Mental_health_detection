@@ -31,18 +31,29 @@ from contextlib import asynccontextmanager
 
 import mlflow
 import numpy as np
+from dotenv import load_dotenv
 from fastapi import FastAPI
 
-from mental_health.api.fallback import fallback_demo_prediction
-from mental_health.api.logging_config import configure_logging
-from mental_health.api.model_loader import LoadedModel, load_production_model
-from mental_health.api.schemas import (
+# Must run before the mlflow_config import below reads MLFLOW_TRACKING_URI /
+# MLFLOW_ARTIFACT_ROOT from the environment (e.g. a shared team backend
+# instead of the local SQLite default) — see mlflow_config.py's docstring.
+# A no-op in Docker/Cloud Run, where these are set directly as container
+# env vars and there is no .env file to find.
+load_dotenv()
+
+from mental_health.api.fallback import fallback_demo_prediction  # noqa: E402
+from mental_health.api.logging_config import configure_logging  # noqa: E402
+from mental_health.api.model_loader import LoadedModel, load_production_model  # noqa: E402
+from mental_health.api.schemas import (  # noqa: E402
     HealthResponse,
     ModelInfoResponse,
     PredictRequest,
     PredictResponse,
 )
-from mental_health.config.mlflow_config import MLFLOW_REGISTERED_MODEL_NAME, MLFLOW_TRACKING_URI
+from mental_health.config.mlflow_config import (  # noqa: E402
+    MLFLOW_REGISTERED_MODEL_NAME,
+    MLFLOW_TRACKING_URI,
+)
 
 configure_logging()
 logger = logging.getLogger(__name__)

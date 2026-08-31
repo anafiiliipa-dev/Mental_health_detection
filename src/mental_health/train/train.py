@@ -58,25 +58,31 @@ import mlflow
 import mlflow.sklearn
 import numpy as np
 import pandas as pd
+from dotenv import load_dotenv
 from sklearn.model_selection import train_test_split
 
-from mental_health.config.mlflow_config import (
+# Must run before the mlflow_config import below reads MLFLOW_TRACKING_URI /
+# MLFLOW_ARTIFACT_ROOT from the environment (e.g. a shared team backend
+# instead of the local SQLite default) — see mlflow_config.py's docstring.
+load_dotenv()
+
+from mental_health.config.mlflow_config import (  # noqa: E402
     MLFLOW_ARTIFACT_ROOT,
     MLFLOW_EXPERIMENT_NAME,
     MLFLOW_REGISTERED_MODEL_NAME,
     MLFLOW_TRACKING_URI,
     STAGING_ALIAS,
 )
-from mental_health.config.paths import DEFAULT_CLEAN_DATA_PATH
-from mental_health.data.cleaning import MASKED_COL, TARGET_COL, TEXT_COL
-from mental_health.train.benchmark import run_nested_cv_benchmark
-from mental_health.train.champion import (
+from mental_health.config.paths import DEFAULT_CLEAN_DATA_PATH  # noqa: E402
+from mental_health.data.cleaning import MASKED_COL, TARGET_COL, TEXT_COL  # noqa: E402
+from mental_health.train.benchmark import run_nested_cv_benchmark  # noqa: E402
+from mental_health.train.champion import (  # noqa: E402
     evaluate_final_model,
     select_champion_config,
     select_champion_params,
     train_final_model,
 )
-from mental_health.train.model_registry import (
+from mental_health.train.model_registry import (  # noqa: E402
     RANDOM_STATE,
     build_model_registry,
     compute_boosted_class_weights,

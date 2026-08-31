@@ -32,9 +32,15 @@ from __future__ import annotations
 import logging
 
 import mlflow
+from dotenv import load_dotenv
 from mlflow.exceptions import MlflowException
 
-from mental_health.config.mlflow_config import (
+# Must run before the mlflow_config import below reads MLFLOW_TRACKING_URI /
+# MLFLOW_ARTIFACT_ROOT from the environment (e.g. a shared team backend
+# instead of the local SQLite default) — see mlflow_config.py's docstring.
+load_dotenv()
+
+from mental_health.config.mlflow_config import (  # noqa: E402
     MLFLOW_REGISTERED_MODEL_NAME,
     MLFLOW_TRACKING_URI,
     PRODUCTION_ALIAS,
