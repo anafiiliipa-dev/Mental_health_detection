@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from lightgbm import LGBMClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import MultinomialNB
@@ -26,6 +27,7 @@ from sklearn.svm import LinearSVC
 from sklearn.utils.class_weight import compute_class_weight
 
 from mental_health.config.paths import CRITICAL_LABELS
+from mental_health.train.xgb_wrapper import XGBTextClassifier
 
 RANDOM_STATE = 42
 
@@ -122,5 +124,26 @@ def build_model_registry(class_weight_dict: dict[str, float]) -> dict[str, dict]
                 ("clf", MultinomialNB()),
             ]),
             "param_grid": {"clf__alpha": [0.5, 1.0]},
+        },
+        # Phase 11: XGBoost/LightGBM published on the same TF-IDF features
+        # as the linear registry above, on request from the audit
+        # (mentioned in architecture.md but never actually benchmarked).
+        # class_weight_dict is the same boosted-balanced weighting the
+        # "_balanced" linear candidates already use.
+        "XGBoost_balanced": {
+            "pipeline": Pipeline([
+                ("tfidf", TfidfVectorizer(**TFIDF_KWARGS)),
+                ("clf", XGBTextClassifier(random_state=RANDOM_STATE, class_weight=class_weight_dict)),
+            ]),
+            "param_grid": {"clf__n_estimators": [100, 200], "clf__max_depth": [4, 6]},
+        },
+        "LightGBM_balanced": {
+            "pipeline": Pipeline([
+                ("tfidf", TfidfVectorizer(**TFIDF_KWARGS)),
+                ("clf", LGBMClassifier(
+                    class_weight=class_weight_dict, random_state=RANDOM_STATE, verbose=-1
+                )),
+            ]),
+            "param_grid": {"clf__n_estimators": [100, 200], "clf__num_leaves": [15, 31]},
         },
     }

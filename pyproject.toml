@@ -121,6 +121,15 @@ monitoring = [
     "evidently>=0.4,<0.5",
 ]
 
+# ---- Extra candidate models (Phase 11): benchmarked alongside the classical
+# TF-IDF + linear registry, published in the same nested CV comparison
+# tables. Training-time only -- never needed to serve the API, since only
+# the already-registered champion (whatever won) gets loaded at inference.
+boosted_models = [
+    "xgboost>=2.0",
+    "lightgbm>=4.0",
+]
+
 # ---- Serving API (Phase 6) ----
 api = [
     "fastapi>=0.110",
@@ -144,7 +153,7 @@ rag = [
 
 # ---- Everything (dashboard + heavy notebooks + RAG + dev tooling) ----
 all = [
-    "mental-health-intelligence[streamlit,transformers,nlp,dev,mlflow,api,rag,monitoring]",
+    "mental-health-intelligence[streamlit,transformers,nlp,dev,mlflow,api,rag,monitoring,boosted_models]",
 ]
 
 [project.urls]

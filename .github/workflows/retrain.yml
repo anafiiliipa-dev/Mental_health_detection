@@ -40,7 +40,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - run: pip install -e ".[api,mlflow]"
+      - run: pip install -e ".[api,mlflow,boosted_models]"
 
       - name: Train candidate model (benchmark + champion, registered as "staging")
         run: python -m mental_health.train.train

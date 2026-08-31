@@ -66,7 +66,7 @@ class TestComputeBoostedClassWeights:
 # ============================================================
 
 class TestBuildModelRegistry:
-    def test_contains_the_five_expected_candidates(self):
+    def test_contains_the_seven_expected_candidates(self):
         registry = build_model_registry({"ADHD": 1.0})
         assert set(registry.keys()) == {
             "LinearSVC_balanced",
@@ -74,6 +74,8 @@ class TestBuildModelRegistry:
             "LogReg_balanced",
             "LogReg_plain",
             "MultinomialNB",
+            "XGBoost_balanced",
+            "LightGBM_balanced",
         }
 
     def test_every_candidate_has_a_pipeline_and_param_grid(self):
