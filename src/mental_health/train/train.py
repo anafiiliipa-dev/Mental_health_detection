@@ -78,12 +78,14 @@ from mental_health.config.paths import DEFAULT_CLEAN_DATA_PATH, MODEL_COMPARISON
 from mental_health.data.cleaning import MASKED_COL, TARGET_COL, TEXT_COL  # noqa: E402
 from mental_health.train.benchmark import run_nested_cv_benchmark  # noqa: E402
 from mental_health.train.champion import (  # noqa: E402
+    _strip_embedding_caches,
     evaluate_final_model,
     select_champion_config,
     select_champion_params,
     select_runner_up_config,
     train_final_model,
 )
+from mental_health.train.embedding_wrapper import precompute_dataset_embeddings  # noqa: E402
 from mental_health.train.evaluation_metrics import paired_bootstrap_test  # noqa: E402
 from mental_health.train.model_registry import (  # noqa: E402
     RANDOM_STATE,
@@ -137,11 +139,17 @@ def build_splits(df: pd.DataFrame, test_size: float = TEST_SIZE, random_state: i
     return splits
 
 
-def run_benchmark_stage(splits: dict, dataset_hash: str) -> tuple[pd.DataFrame, dict]:
+def run_benchmark_stage(
+    splits: dict, dataset_hash: str, embedding_cache: dict | None = None
+) -> tuple[pd.DataFrame, dict]:
     """
     Run the nested CV benchmark for every text variant, logging one MLflow
     run per variant. Returns the combined summary (all variants, all
     models) and the raw best-params output needed for champion selection.
+
+    ``embedding_cache``, when given, is only passed to the registry for the
+    "raw" text variant (Phase 11: the embedding candidates are scoped to
+    raw text only, keeping the masked-variant comparison unchanged).
     """
     summaries = []
     nested_outputs = {}
@@ -151,7 +159,8 @@ def run_benchmark_stage(splits: dict, dataset_hash: str) -> tuple[pd.DataFrame, 
         y_train = splits[text_variant]["y_train"]
 
         class_weights = compute_boosted_class_weights(y_train)
-        registry = build_model_registry(class_weights)
+        variant_embedding_cache = embedding_cache if text_variant == "raw" else None
+        registry = build_model_registry(class_weights, embedding_cache=variant_embedding_cache)
 
         with mlflow.start_run(run_name=f"nested_cv_{text_variant}"):
             mlflow.log_param("stage", "nested_cv_benchmark")
@@ -207,7 +216,9 @@ def _train_and_evaluate(
     return model, eval_result, X_train, X_test, y_test
 
 
-def evaluate_all_candidates(nested_summary: pd.DataFrame, nested_outputs: dict, splits: dict) -> pd.DataFrame:
+def evaluate_all_candidates(
+    nested_summary: pd.DataFrame, nested_outputs: dict, splits: dict, embedding_cache: dict | None = None
+) -> pd.DataFrame:
     """
     Phase 11: train + evaluate EVERY (model, text_variant) candidate from
     the nested CV benchmark on its own held-out test split -- not just the
@@ -229,7 +240,8 @@ def evaluate_all_candidates(nested_summary: pd.DataFrame, nested_outputs: dict, 
         text_variant = summary_row["text_variant"]
         params = select_champion_params(nested_outputs, text_variant, model_name)
         class_weights = compute_boosted_class_weights(splits[text_variant]["y_train"])
-        registry = build_model_registry(class_weights)
+        variant_embedding_cache = embedding_cache if text_variant == "raw" else None
+        registry = build_model_registry(class_weights, embedding_cache=variant_embedding_cache)
 
         _, eval_result, _, _, _ = _train_and_evaluate(registry, model_name, params, splits, text_variant)
         rows.append(
@@ -248,7 +260,13 @@ def evaluate_all_candidates(nested_summary: pd.DataFrame, nested_outputs: dict, 
     return pd.DataFrame(rows).sort_values("f1_macro", ascending=False).reset_index(drop=True)
 
 
-def run_champion_stage(nested_summary: pd.DataFrame, nested_outputs: dict, splits: dict, dataset_hash: str):
+def run_champion_stage(
+    nested_summary: pd.DataFrame,
+    nested_outputs: dict,
+    splits: dict,
+    dataset_hash: str,
+    embedding_cache: dict | None = None,
+):
     """
     Select the champion (model + text variant), train it on the full
     training set, evaluate it on the held-out test set, and log everything
@@ -269,7 +287,8 @@ def run_champion_stage(nested_summary: pd.DataFrame, nested_outputs: dict, split
     champion_params = select_champion_params(nested_outputs, text_variant, model_name)
 
     class_weights = compute_boosted_class_weights(splits[text_variant]["y_train"])
-    registry = build_model_registry(class_weights)
+    champion_embedding_cache = embedding_cache if text_variant == "raw" else None
+    registry = build_model_registry(class_weights, embedding_cache=champion_embedding_cache)
 
     logger.info("Champion selected: %s / %s, params=%s", model_name, text_variant, champion_params)
     # Phase 11: the champion is the model that actually gets served, so it
@@ -288,7 +307,8 @@ def run_champion_stage(nested_summary: pd.DataFrame, nested_outputs: dict, split
         ru_text_variant = runner_up_config["text_variant"]
         ru_params = select_champion_params(nested_outputs, ru_text_variant, ru_model_name)
         ru_class_weights = compute_boosted_class_weights(splits[ru_text_variant]["y_train"])
-        ru_registry = build_model_registry(ru_class_weights)
+        ru_embedding_cache = embedding_cache if ru_text_variant == "raw" else None
+        ru_registry = build_model_registry(ru_class_weights, embedding_cache=ru_embedding_cache)
 
         logger.info("Runner-up for significance test: %s / %s, params=%s", ru_model_name, ru_text_variant, ru_params)
         _, ru_eval_result, _, _, ru_y_test = _train_and_evaluate(
@@ -353,6 +373,14 @@ def run_champion_stage(nested_summary: pd.DataFrame, nested_outputs: dict, split
                 (tmp_dir / "significance_test.json").write_text(json.dumps(significance_result, indent=2))
                 mlflow.log_artifact(str(tmp_dir / "significance_test.json"))
 
+        # Phase 11: drop any EmbeddingVectorizer's bulky training-time
+        # cache right before serialization -- evaluate_final_model (above)
+        # already used it for model.predict(X_test), so it is no longer
+        # needed; at real inference time the API builds a small per-call
+        # cache instead. Best-effort / duck-typed: a no-op for every
+        # non-embedding champion.
+        _strip_embedding_caches(final_model)
+
         model_info = mlflow.sklearn.log_model(
             final_model,
             name="model",
@@ -401,9 +429,16 @@ def run(data_path: Path = DEFAULT_CLEAN_DATA_PATH) -> dict:
 
     splits = build_splits(df)
 
-    nested_summary, nested_outputs = run_benchmark_stage(splits, dataset_hash)
+    # Phase 11: sentence-transformer embeddings (Embedding_LogReg/SVM
+    # candidates) are precomputed ONCE for the whole dataset here -- a
+    # frozen, pretrained, non-fit feature extractor has no per-fold
+    # leakage concern, only a compute cost that would otherwise be paid
+    # redundantly in every CV fold and every candidate evaluation.
+    embedding_cache = precompute_dataset_embeddings(df[TEXT_COL])
+
+    nested_summary, nested_outputs = run_benchmark_stage(splits, dataset_hash, embedding_cache=embedding_cache)
     final_model, champion_config, eval_result, registered_version = run_champion_stage(
-        nested_summary, nested_outputs, splits, dataset_hash
+        nested_summary, nested_outputs, splits, dataset_hash, embedding_cache=embedding_cache
     )
 
     logger.info(
@@ -416,7 +451,7 @@ def run(data_path: Path = DEFAULT_CLEAN_DATA_PATH) -> dict:
     # written to the repo (docs/reports table) and logged as an MLflow
     # artifact of its own run, so it survives independently of any single
     # champion_final run and is easy to diff between training runs.
-    comparison_df = evaluate_all_candidates(nested_summary, nested_outputs, splits)
+    comparison_df = evaluate_all_candidates(nested_summary, nested_outputs, splits, embedding_cache=embedding_cache)
     MODEL_COMPARISON_PATH.parent.mkdir(parents=True, exist_ok=True)
     comparison_df.to_csv(MODEL_COMPARISON_PATH, index=False)
     logger.info("Model comparison table written to %s:\n%s", MODEL_COMPARISON_PATH, comparison_df.to_string(index=False))

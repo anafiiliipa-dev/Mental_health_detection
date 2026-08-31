@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import mlflow
+import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -96,6 +97,20 @@ def _write_tiny_clean_csv(path: Path, rows_per_class: int = 20) -> None:
     pd.DataFrame(rows).to_csv(path, index=False)
 
 
+def _fake_precompute_dataset_embeddings(texts, model_name=None):
+    """
+    Fast, offline, deterministic stand-in for the real sentence-transformer
+    precompute step -- this end-to-end test must not require network access
+    or a real model download just to exercise train.py's orchestration.
+    """
+    dim = 4
+    cache = {}
+    for text in dict.fromkeys(texts):  # de-dup, preserves order
+        rng = np.random.default_rng(abs(hash(text)) % (2**32))
+        cache[text] = rng.random(dim)
+    return cache
+
+
 class TestRunEndToEnd:
     def test_run_produces_a_champion_and_logs_to_mlflow(self, tmp_path, monkeypatch):
         # Redirect MLflow's tracking store (SQLite db + artifact root) to a
@@ -111,11 +126,13 @@ class TestRunEndToEnd:
         data_path = tmp_path / "clean.csv"
         _write_tiny_clean_csv(data_path, rows_per_class=20)
 
+        monkeypatch.setattr(train_module, "precompute_dataset_embeddings", _fake_precompute_dataset_embeddings)
+
         result = train_module.run(data_path=data_path)
 
         assert result["champion_config"]["model_name"] in {
             "LinearSVC_balanced", "LinearSVC_plain", "LogReg_balanced", "LogReg_plain", "MultinomialNB",
-            "XGBoost_balanced", "LightGBM_balanced",
+            "XGBoost_balanced", "LightGBM_balanced", "Embedding_LogReg", "Embedding_SVM",
         }
         assert result["champion_config"]["text_variant"] in {"raw", "masked"}
         assert 0.0 <= result["eval_result"]["f1_macro"] <= 1.0
@@ -128,11 +145,12 @@ class TestRunEndToEnd:
         assert staged.version == result["registered_version"]
 
         # Phase 11: the comparison table covers every benchmarked candidate
-        # (7 models x 2 text variants = 14 rows), written to disk and
-        # returned in the result dict.
+        # (7 classical models x 2 text variants, plus Embedding_LogReg/
+        # Embedding_SVM on the "raw" variant only = 16 rows), written to
+        # disk and returned in the result dict.
         comparison_df = result["model_comparison"]
         assert comparison_path.exists(), "Model comparison CSV was not written"
-        assert len(comparison_df) == 14
+        assert len(comparison_df) == 16
         for column in ["model", "text_variant", "f1_macro", "recall_macro", "critical_recall", "mcc"]:
             assert column in comparison_df.columns
         assert comparison_df["f1_macro"].is_monotonic_decreasing

@@ -85,6 +85,30 @@ def select_champion_params(nested_best_params: dict, text_variant: str, model_na
     return json.loads(most_common_params_str)
 
 
+def _strip_embedding_caches(model) -> None:
+    """
+    Best-effort: after fitting, drop any EmbeddingVectorizer's training-time
+    embedding_cache (which can hold thousands of vectors) from the fitted
+    model before it gets serialized/registered -- at inference time a
+    fresh, tiny cache is built per call, so nothing is lost, only the
+    now-pointless bulk of the training cache.
+    """
+    candidates = [model]
+    if hasattr(model, "calibrated_classifiers_"):
+        for calibrated in model.calibrated_classifiers_:
+            inner = getattr(calibrated, "estimator", None)
+            if inner is not None:
+                candidates.append(inner)
+
+    for candidate in candidates:
+        steps = getattr(candidate, "steps", None)
+        if not steps:
+            continue
+        for _, step in steps:
+            if hasattr(step, "embedding_cache"):
+                step.embedding_cache = None
+
+
 def train_final_model(
     model_registry: dict,
     model_name: str,
@@ -116,6 +140,12 @@ def train_final_model(
         CalibratedClassifierCV(base_model, cv=calibration_cv, method=calibration_method) if calibrate else base_model
     )
     final_model.fit(X_train, y_train)
+    # NOTE: embedding caches are intentionally NOT stripped here -- the
+    # caller (run_champion_stage) still needs a live cache to run
+    # evaluate_final_model's model.predict(X_test) right after this.
+    # Stripping happens explicitly, later, only for the model that is
+    # actually about to be serialized/registered in MLflow -- see
+    # _strip_embedding_caches's call site in train.py.
     return final_model
 
 

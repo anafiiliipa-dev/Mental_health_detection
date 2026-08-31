@@ -27,6 +27,7 @@ from sklearn.svm import LinearSVC
 from sklearn.utils.class_weight import compute_class_weight
 
 from mental_health.config.paths import CRITICAL_LABELS
+from mental_health.train.embedding_wrapper import EmbeddingVectorizer
 from mental_health.train.xgb_wrapper import XGBTextClassifier
 
 RANDOM_STATE = 42
@@ -78,13 +79,26 @@ def compute_boosted_class_weights(y_train: pd.Series) -> dict[str, float]:
     return class_weight_dict
 
 
-def build_model_registry(class_weight_dict: dict[str, float]) -> dict[str, dict]:
+def build_model_registry(
+    class_weight_dict: dict[str, float], embedding_cache: dict[str, object] | None = None
+) -> dict[str, dict]:
     """
-    Build the candidate model registry: 5 pipelines (TF-IDF + classifier),
-    each with a small hyperparameter grid, identical to the original
-    notebook's ``MODEL_REGISTRY``.
+    Build the candidate model registry: TF-IDF + classifier pipelines,
+    each with a small hyperparameter grid (the original 5 from the
+    notebook's ``MODEL_REGISTRY``, plus XGBoost/LightGBM added in
+    Phase 11).
+
+    ``embedding_cache``, when provided, additionally adds two
+    sentence-embedding candidates (``Embedding_LogReg``,
+    ``Embedding_SVM`` -- Phase 11's "solution intermediaire" between
+    TF-IDF and a full transformer fine-tune). Left out when
+    ``embedding_cache`` is ``None`` (the default) so every existing
+    caller keeps working unchanged, and so importing/using this function
+    never requires the ``embedding_models`` extra (``sentence-transformers``)
+    to be installed unless an embedding-based benchmark is actually
+    requested.
     """
-    return {
+    registry = {
         "LinearSVC_balanced": {
             "pipeline": Pipeline([
                 ("tfidf", TfidfVectorizer(**TFIDF_KWARGS)),
@@ -147,3 +161,23 @@ def build_model_registry(class_weight_dict: dict[str, float]) -> dict[str, dict]
             "param_grid": {"clf__n_estimators": [100, 200], "clf__num_leaves": [15, 31]},
         },
     }
+
+    if embedding_cache is not None:
+        registry["Embedding_LogReg"] = {
+            "pipeline": Pipeline([
+                ("embed", EmbeddingVectorizer(embedding_cache=embedding_cache)),
+                ("clf", LogisticRegression(
+                    solver="saga", class_weight=class_weight_dict, max_iter=2000, random_state=RANDOM_STATE
+                )),
+            ]),
+            "param_grid": {"clf__C": [0.5, 1.0, 2.0]},
+        }
+        registry["Embedding_SVM"] = {
+            "pipeline": Pipeline([
+                ("embed", EmbeddingVectorizer(embedding_cache=embedding_cache)),
+                ("clf", LinearSVC(class_weight=class_weight_dict, random_state=RANDOM_STATE)),
+            ]),
+            "param_grid": {"clf__C": [0.5, 1.0, 2.0]},
+        }
+
+    return registry

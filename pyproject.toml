@@ -130,6 +130,15 @@ boosted_models = [
     "lightgbm>=4.0",
 ]
 
+# ---- Embedding-based candidate models (Phase 11): sentence-transformers
+# (MiniLM, already used for RAG) as a frozen feature extractor for
+# Embedding_LogReg/Embedding_SVM in the benchmark. Declared separately from
+# the `rag` extra (same underlying package) so pulling in embeddings for
+# training doesn't also require openai/langchain.
+embedding_models = [
+    "sentence-transformers>=2.7",
+]
+
 # ---- Serving API (Phase 6) ----
 api = [
     "fastapi>=0.110",
@@ -153,7 +162,7 @@ rag = [
 
 # ---- Everything (dashboard + heavy notebooks + RAG + dev tooling) ----
 all = [
-    "mental-health-intelligence[streamlit,transformers,nlp,dev,mlflow,api,rag,monitoring,boosted_models]",
+    "mental-health-intelligence[streamlit,transformers,nlp,dev,mlflow,api,rag,monitoring,boosted_models,embedding_models]",
 ]
 
 [project.urls]
