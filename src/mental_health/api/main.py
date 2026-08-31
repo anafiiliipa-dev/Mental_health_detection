@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
 
@@ -33,6 +34,7 @@ import numpy as np
 from fastapi import FastAPI
 
 from mental_health.api.fallback import fallback_demo_prediction
+from mental_health.api.logging_config import configure_logging
 from mental_health.api.model_loader import LoadedModel, load_production_model
 from mental_health.api.schemas import (
     HealthResponse,
@@ -42,6 +44,7 @@ from mental_health.api.schemas import (
 )
 from mental_health.config.mlflow_config import MLFLOW_REGISTERED_MODEL_NAME, MLFLOW_TRACKING_URI
 
+configure_logging()
 logger = logging.getLogger(__name__)
 
 # Loaded once at startup (see `lifespan`), not per-request — re-loading the
@@ -124,18 +127,28 @@ def model_info() -> ModelInfoResponse:
 @app.post("/predict", response_model=PredictResponse)
 def predict(request: PredictRequest) -> PredictResponse:
     loaded: LoadedModel = _STATE["model"]
+    started = time.perf_counter()
+
+    if not loaded.is_available:
+        label, confidence, probabilities = fallback_demo_prediction(request.text)
+        response = PredictResponse(label=label, confidence=confidence, probabilities=probabilities, is_demo_fallback=True)
+    else:
+        response = _predict_with_real_model(loaded, request.text)
+
+    latency_ms = round((time.perf_counter() - started) * 1000, 2)
 
     # Never log request.text — a hash + length is enough to debug volume/traffic
     # without ever persisting raw mental-health text in application logs.
     logger.info(
-        "predict request: fingerprint=%s length=%d demo_fallback=%s",
-        _text_fingerprint(request.text),
-        len(request.text),
-        not loaded.is_available,
+        "predict request",
+        extra={
+            "fingerprint": _text_fingerprint(request.text),
+            "text_length": len(request.text),
+            "is_demo_fallback": response.is_demo_fallback,
+            "model_version": loaded.version,
+            "predicted_label": response.label,
+            "latency_ms": latency_ms,
+        },
     )
 
-    if not loaded.is_available:
-        label, confidence, probabilities = fallback_demo_prediction(request.text)
-        return PredictResponse(label=label, confidence=confidence, probabilities=probabilities, is_demo_fallback=True)
-
-    return _predict_with_real_model(loaded, request.text)
+    return response
