@@ -7,6 +7,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
 
 from mental_health.train.evaluation_metrics import (
+    compute_brier_score,
+    compute_ece,
     compute_mcc,
     compute_pr_auc_per_class,
     get_ranking_scores,
@@ -85,3 +87,41 @@ class TestPairedBootstrapTest:
     def test_mismatched_lengths_raise(self):
         with pytest.raises(ValueError):
             paired_bootstrap_test(["A", "B"], ["A"], ["A", "B"])
+
+
+class TestComputeBrierScore:
+    def test_perfect_confident_predictions_score_zero(self):
+        labels = ["A", "B"]
+        y_true = ["A", "B", "A", "B"]
+        proba = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 0.0], [0.0, 1.0]])
+        assert compute_brier_score(y_true, proba, labels) == pytest.approx(0.0)
+
+    def test_confidently_wrong_predictions_score_high(self):
+        labels = ["A", "B"]
+        y_true = ["A", "A"]
+        proba = np.array([[0.0, 1.0], [0.0, 1.0]])  # fully confident in the wrong class
+        assert compute_brier_score(y_true, proba, labels) == pytest.approx(2.0)
+
+    def test_uniform_guessing_lands_between_perfect_and_worst(self):
+        labels = ["A", "B"]
+        y_true = ["A", "B"]
+        proba = np.array([[0.5, 0.5], [0.5, 0.5]])
+        score = compute_brier_score(y_true, proba, labels)
+        assert 0.0 < score < 2.0
+
+
+class TestComputeEce:
+    def test_perfectly_calibrated_confidence_scores_zero(self):
+        # 10 samples all predicted "A" at confidence 0.7 — 7 of them
+        # actually are "A" (correct), 3 are "B" (wrong): accuracy 0.7
+        # matches confidence 0.7 exactly within the bin.
+        labels = ["A", "B"]
+        y_true = ["A"] * 7 + ["B"] * 3
+        proba = np.array([[0.7, 0.3]] * 10)
+        assert compute_ece(y_true, proba, labels, n_bins=10) == pytest.approx(0.0, abs=1e-9)
+
+    def test_overconfident_wrong_predictions_score_high(self):
+        labels = ["A", "B"]
+        y_true = ["A"] * 10
+        proba = np.array([[0.0, 1.0]] * 10)  # 100% confident, always wrong
+        assert compute_ece(y_true, proba, labels, n_bins=10) == pytest.approx(1.0)

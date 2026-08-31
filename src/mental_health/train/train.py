@@ -185,14 +185,24 @@ def run_benchmark_stage(splits: dict, dataset_hash: str) -> tuple[pd.DataFrame, 
     return nested_summary, nested_outputs
 
 
-def _train_and_evaluate(registry: dict, model_name: str, params: dict, splits: dict, text_variant: str) -> tuple:
-    """Train one candidate (model_name/text_variant) on its full training split and evaluate it on its own test split."""
+def _train_and_evaluate(
+    registry: dict, model_name: str, params: dict, splits: dict, text_variant: str, calibrate: bool = False
+) -> tuple:
+    """
+    Train one candidate (model_name/text_variant) on its full training
+    split and evaluate it on its own test split.
+
+    ``calibrate=True`` fits it through ``CalibratedClassifierCV`` (Platt
+    scaling) — used only for the champion (see ``run_champion_stage``),
+    since that is the model that actually ends up served; the runner-up
+    trained here only for the significance test stays uncalibrated.
+    """
     X_train = splits[text_variant]["X_train"]
     y_train = splits[text_variant]["y_train"]
     X_test = splits[text_variant]["X_test"]
     y_test = splits[text_variant]["y_test"]
 
-    model = train_final_model(registry, model_name, params, X_train, y_train)
+    model = train_final_model(registry, model_name, params, X_train, y_train, calibrate=calibrate)
     eval_result = evaluate_final_model(model, X_test, y_test)
     return model, eval_result, X_train, X_test, y_test
 
@@ -221,8 +231,13 @@ def run_champion_stage(nested_summary: pd.DataFrame, nested_outputs: dict, split
     registry = build_model_registry(class_weights)
 
     logger.info("Champion selected: %s / %s, params=%s", model_name, text_variant, champion_params)
+    # Phase 11: the champion is the model that actually gets served, so it
+    # is calibrated (Platt scaling) here — turns LinearSVC's raw
+    # decision_function into real probabilities (predict_proba), a
+    # prerequisite for brier_score/ece to mean anything and for the API's
+    # confidence score to stop being a softmax approximation.
     final_model, eval_result, X_train, X_test, y_test = _train_and_evaluate(
-        registry, model_name, champion_params, splits, text_variant
+        registry, model_name, champion_params, splits, text_variant, calibrate=True
     )
 
     runner_up_config = select_runner_up_config(nested_summary)
@@ -275,6 +290,10 @@ def run_champion_stage(nested_summary: pd.DataFrame, nested_outputs: dict, split
         if eval_result["pr_auc_per_class"]:
             for label, value in eval_result["pr_auc_per_class"].items():
                 mlflow.log_metric(f"pr_auc__{label}", value)
+        if eval_result["brier_score"] is not None:
+            mlflow.log_metric("brier_score", eval_result["brier_score"])
+        if eval_result["ece"] is not None:
+            mlflow.log_metric("ece", eval_result["ece"])
 
         if significance_result is not None:
             mlflow.log_param("significance_runner_up_model", significance_result["runner_up_model"])
@@ -294,7 +313,19 @@ def run_champion_stage(nested_summary: pd.DataFrame, nested_outputs: dict, split
                 mlflow.log_artifact(str(tmp_dir / "significance_test.json"))
 
         model_info = mlflow.sklearn.log_model(
-            final_model, name="model", registered_model_name=MLFLOW_REGISTERED_MODEL_NAME
+            final_model,
+            name="model",
+            registered_model_name=MLFLOW_REGISTERED_MODEL_NAME,
+            # MLflow's default sklearn serializer (skops) refuses to
+            # (de)serialize types it doesn't recognise as safe, by design.
+            # The champion is now wrapped in CalibratedClassifierCV
+            # (Phase 11 calibration), whose internal calibrator types need
+            # to be explicitly declared trusted -- these are sklearn's own
+            # calibration internals, not arbitrary code, so this is safe.
+            skops_trusted_types=[
+                "sklearn.calibration._CalibratedClassifier",
+                "sklearn.calibration._SigmoidCalibration",
+            ],
         )
 
         # Every newly trained model is registered and aliased "staging" —

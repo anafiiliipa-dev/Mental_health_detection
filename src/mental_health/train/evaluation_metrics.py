@@ -30,6 +30,7 @@ NOT included here.
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 from sklearn.metrics import average_precision_score, f1_score, matthews_corrcoef
 from sklearn.preprocessing import label_binarize
 
@@ -76,6 +77,48 @@ def compute_pr_auc_per_class(y_true, scores: np.ndarray, labels: list[str]) -> d
         label: float(average_precision_score(y_true_binarized[:, i], scores[:, i]))
         for i, label in enumerate(labels)
     }
+
+
+def compute_brier_score(y_true, proba: np.ndarray, labels: list[str]) -> float:
+    """
+    Multiclass Brier score: mean squared distance between the predicted
+    probability vector and the one-hot true label, averaged over samples.
+    Lower is better (0 = perfect). Requires REAL probabilities
+    (``predict_proba``) -- meaningless on raw decision_function scores,
+    which is exactly why this project only computes it after calibration.
+    """
+    y_true_series = pd.Series(y_true).reset_index(drop=True)
+    one_hot = pd.get_dummies(y_true_series).reindex(columns=labels, fill_value=0).to_numpy(dtype=float)
+    proba = np.asarray(proba)
+    return float(np.mean(np.sum((proba - one_hot) ** 2, axis=1)))
+
+
+def compute_ece(y_true, proba: np.ndarray, labels: list[str], n_bins: int = 10) -> float:
+    """
+    Expected Calibration Error (top-label, equal-width bins): bins
+    predictions by their top-class confidence, and averages
+    |accuracy - confidence| within each bin, weighted by bin size. Lower
+    is better (0 = perfectly calibrated). Also requires real
+    probabilities, same caveat as ``compute_brier_score``.
+    """
+    y_true = np.asarray(y_true)
+    proba = np.asarray(proba)
+    confidences = proba.max(axis=1)
+    predictions = np.array(labels)[proba.argmax(axis=1)]
+    correct = (predictions == y_true).astype(float)
+
+    bin_edges = np.linspace(0.0, 1.0, n_bins + 1)
+    n = len(y_true)
+    ece = 0.0
+    for i in range(n_bins):
+        lo, hi = bin_edges[i], bin_edges[i + 1]
+        mask = (confidences >= lo) & (confidences <= hi if i == n_bins - 1 else confidences < hi)
+        if not mask.any():
+            continue
+        bin_accuracy = correct[mask].mean()
+        bin_confidence = confidences[mask].mean()
+        ece += (mask.sum() / n) * abs(bin_accuracy - bin_confidence)
+    return float(ece)
 
 
 def _default_metric(y_true, y_pred) -> float:

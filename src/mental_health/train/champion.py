@@ -15,10 +15,13 @@ from collections import Counter
 
 import pandas as pd
 from sklearn.base import clone
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import classification_report, confusion_matrix, f1_score, recall_score
 
 from mental_health.train.benchmark import critical_recall_score
 from mental_health.train.evaluation_metrics import (
+    compute_brier_score,
+    compute_ece,
     compute_mcc,
     compute_pr_auc_per_class,
     get_ranking_scores,
@@ -82,10 +85,36 @@ def select_champion_params(nested_best_params: dict, text_variant: str, model_na
     return json.loads(most_common_params_str)
 
 
-def train_final_model(model_registry: dict, model_name: str, params: dict, X_train, y_train):  # noqa: N803
-    """Fit the champion pipeline (architecture from the registry, tuned params) on the full training set."""
-    final_model = clone(model_registry[model_name]["pipeline"])
-    final_model.set_params(**params)
+def train_final_model(
+    model_registry: dict,
+    model_name: str,
+    params: dict,
+    X_train,  # noqa: N803
+    y_train,
+    calibrate: bool = False,
+    calibration_cv: int = 5,
+    calibration_method: str = "sigmoid",
+):
+    """
+    Fit the champion pipeline (architecture from the registry, tuned
+    params) on the full training set.
+
+    ``calibrate=True`` (Phase 11) wraps the fitted-and-cloned pipeline in
+    ``CalibratedClassifierCV`` (Platt scaling by default) before fitting --
+    this is what turns LinearSVC's raw ``decision_function`` output into
+    real, well-calibrated probabilities (``predict_proba``), which is a
+    prerequisite for Brier score / ECE meaning anything, and also gives
+    the API real confidence scores instead of the current softmax
+    approximation over ``decision_function``. Off by default so every
+    other caller (e.g. the runner-up trained only for the significance
+    test) keeps the original, uncalibrated behaviour.
+    """
+    base_model = clone(model_registry[model_name]["pipeline"])
+    base_model.set_params(**params)
+
+    final_model = (
+        CalibratedClassifierCV(base_model, cv=calibration_cv, method=calibration_method) if calibrate else base_model
+    )
     final_model.fit(X_train, y_train)
     return final_model
 
@@ -122,12 +151,21 @@ def evaluate_final_model(model, X_test, y_test) -> dict:  # noqa: N803
     ranking_scores = get_ranking_scores(model, X_test)
     pr_auc_per_class = compute_pr_auc_per_class(y_test, ranking_scores, labels) if ranking_scores is not None else None
 
+    # Brier score / ECE need REAL probabilities, not raw decision_function
+    # scores — only computed when the model actually has predict_proba
+    # (i.e. it went through calibration; see train_final_model(calibrate=True)).
+    proba = model.predict_proba(X_test) if hasattr(model, "predict_proba") else None
+    brier_score = compute_brier_score(y_test, proba, labels) if proba is not None else None
+    ece = compute_ece(y_test, proba, labels) if proba is not None else None
+
     return {
         "f1_macro": f1_score(y_test, y_pred, average="macro", zero_division=0),
         "recall_macro": recall_score(y_test, y_pred, average="macro", zero_division=0),
         "critical_recall": critical_recall_score(y_test, y_pred),
         "mcc": compute_mcc(y_test, y_pred),
         "pr_auc_per_class": pr_auc_per_class,
+        "brier_score": brier_score,
+        "ece": ece,
         "classification_report": classification_report_df,
         "confusion_matrix": confusion_matrix_df,
         "y_pred": y_pred,
