@@ -103,6 +103,10 @@ class TestRunEndToEnd:
         # project's real mlflow.db / mlruns/.
         monkeypatch.setattr(train_module, "MLFLOW_TRACKING_URI", f"sqlite:///{tmp_path / 'mlflow.db'}")
         monkeypatch.setattr(train_module, "MLFLOW_ARTIFACT_ROOT", f"file:{tmp_path / 'mlruns'}")
+        # Same for the Phase 11 model comparison table — must never write
+        # into the project's real reports/tables/classical/ either.
+        comparison_path = tmp_path / "model_comparison.csv"
+        monkeypatch.setattr(train_module, "MODEL_COMPARISON_PATH", comparison_path)
 
         data_path = tmp_path / "clean.csv"
         _write_tiny_clean_csv(data_path, rows_per_class=20)
@@ -111,6 +115,7 @@ class TestRunEndToEnd:
 
         assert result["champion_config"]["model_name"] in {
             "LinearSVC_balanced", "LinearSVC_plain", "LogReg_balanced", "LogReg_plain", "MultinomialNB",
+            "XGBoost_balanced", "LightGBM_balanced",
         }
         assert result["champion_config"]["text_variant"] in {"raw", "masked"}
         assert 0.0 <= result["eval_result"]["f1_macro"] <= 1.0
@@ -121,3 +126,13 @@ class TestRunEndToEnd:
         client = mlflow.MlflowClient()
         staged = client.get_model_version_by_alias(result["registered_model_name"], "staging")
         assert staged.version == result["registered_version"]
+
+        # Phase 11: the comparison table covers every benchmarked candidate
+        # (7 models x 2 text variants = 14 rows), written to disk and
+        # returned in the result dict.
+        comparison_df = result["model_comparison"]
+        assert comparison_path.exists(), "Model comparison CSV was not written"
+        assert len(comparison_df) == 14
+        for column in ["model", "text_variant", "f1_macro", "recall_macro", "critical_recall", "mcc"]:
+            assert column in comparison_df.columns
+        assert comparison_df["f1_macro"].is_monotonic_decreasing

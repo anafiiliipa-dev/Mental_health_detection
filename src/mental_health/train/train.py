@@ -74,7 +74,7 @@ from mental_health.config.mlflow_config import (  # noqa: E402
     MLFLOW_TRACKING_URI,
     STAGING_ALIAS,
 )
-from mental_health.config.paths import DEFAULT_CLEAN_DATA_PATH  # noqa: E402
+from mental_health.config.paths import DEFAULT_CLEAN_DATA_PATH, MODEL_COMPARISON_PATH  # noqa: E402
 from mental_health.data.cleaning import MASKED_COL, TARGET_COL, TEXT_COL  # noqa: E402
 from mental_health.train.benchmark import run_nested_cv_benchmark  # noqa: E402
 from mental_health.train.champion import (  # noqa: E402
@@ -205,6 +205,47 @@ def _train_and_evaluate(
     model = train_final_model(registry, model_name, params, X_train, y_train, calibrate=calibrate)
     eval_result = evaluate_final_model(model, X_test, y_test)
     return model, eval_result, X_train, X_test, y_test
+
+
+def evaluate_all_candidates(nested_summary: pd.DataFrame, nested_outputs: dict, splits: dict) -> pd.DataFrame:
+    """
+    Phase 11: train + evaluate EVERY (model, text_variant) candidate from
+    the nested CV benchmark on its own held-out test split -- not just the
+    champion and runner-up -- with the full rigor metric suite
+    (f1_macro, recall_macro, critical_recall, mcc, brier_score, ece).
+
+    All rows are uncalibrated (unlike the champion actually registered by
+    run_champion_stage), so every candidate is compared on the same
+    footing; the champion's own calibrated numbers are logged separately
+    in the champion_final MLflow run. This is the full "tableau de
+    resultats" comparison across every candidate the registry currently
+    has -- including future additions (embeddings, DistilBERT) once they
+    are wired into build_model_registry / the benchmark stage the same
+    way XGBoost/LightGBM were.
+    """
+    rows = []
+    for _, summary_row in nested_summary.iterrows():
+        model_name = summary_row["model"]
+        text_variant = summary_row["text_variant"]
+        params = select_champion_params(nested_outputs, text_variant, model_name)
+        class_weights = compute_boosted_class_weights(splits[text_variant]["y_train"])
+        registry = build_model_registry(class_weights)
+
+        _, eval_result, _, _, _ = _train_and_evaluate(registry, model_name, params, splits, text_variant)
+        rows.append(
+            {
+                "model": model_name,
+                "text_variant": text_variant,
+                "f1_macro": eval_result["f1_macro"],
+                "recall_macro": eval_result["recall_macro"],
+                "critical_recall": eval_result["critical_recall"],
+                "mcc": eval_result["mcc"],
+                "brier_score": eval_result["brier_score"],
+                "ece": eval_result["ece"],
+            }
+        )
+
+    return pd.DataFrame(rows).sort_values("f1_macro", ascending=False).reset_index(drop=True)
 
 
 def run_champion_stage(nested_summary: pd.DataFrame, nested_outputs: dict, splits: dict, dataset_hash: str):
@@ -371,12 +412,28 @@ def run(data_path: Path = DEFAULT_CLEAN_DATA_PATH) -> dict:
         eval_result["f1_macro"], eval_result["critical_recall"], registered_version,
     )
 
+    # Phase 11: full comparison table across EVERY benchmarked candidate,
+    # written to the repo (docs/reports table) and logged as an MLflow
+    # artifact of its own run, so it survives independently of any single
+    # champion_final run and is easy to diff between training runs.
+    comparison_df = evaluate_all_candidates(nested_summary, nested_outputs, splits)
+    MODEL_COMPARISON_PATH.parent.mkdir(parents=True, exist_ok=True)
+    comparison_df.to_csv(MODEL_COMPARISON_PATH, index=False)
+    logger.info("Model comparison table written to %s:\n%s", MODEL_COMPARISON_PATH, comparison_df.to_string(index=False))
+
+    with mlflow.start_run(run_name="model_comparison"):
+        mlflow.log_param("stage", "model_comparison")
+        mlflow.log_param("dataset_hash", dataset_hash)
+        mlflow.log_param("n_candidates", len(comparison_df))
+        mlflow.log_artifact(str(MODEL_COMPARISON_PATH))
+
     return {
         "champion_config": champion_config,
         "eval_result": eval_result,
         "model": final_model,
         "registered_model_name": MLFLOW_REGISTERED_MODEL_NAME,
         "registered_version": registered_version,
+        "model_comparison": comparison_df,
     }
 
 
