@@ -1,0 +1,49 @@
+name: Weekly retraining
+
+# Phase 12: unconditional weekly retrain against the current dataset
+# (data/clean/mental_health_detection_clean.csv), registered on the shared
+# MLflow backend as a new "staging" version. Promotion to "production" is
+# then handled by promote.py's existing gate: only promoted if it does not
+# regress on f1_macro or critical_recall vs. the current production model
+# (see src/mental_health/train/promote.py's docstring for the exact rule).
+#
+# Note: promoting a new "production" alias does NOT itself redeploy any
+# running service. Cloud Run / Docker only pick up the new model on their
+# next restart -- documented separately for Aamir's deployment
+# (recap_journee.md); for a purely local Docker Compose setup this means a
+# manual `docker compose restart` after a promotion, same as before.
+on:
+  schedule:
+    # Every Monday at 07:00 UTC -- after the drift check (06:00 UTC).
+    - cron: "0 7 * * 1"
+  workflow_dispatch: {}
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    env:
+      MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+      MLFLOW_ARTIFACT_ROOT: ${{ secrets.MLFLOW_ARTIFACT_ROOT }}
+      AWS_ENDPOINT_URL_S3: ${{ secrets.AWS_ENDPOINT_URL_S3 }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - run: pip install -e ".[api,mlflow]"
+
+      - name: Train candidate model (benchmark + champion, registered as "staging")
+        run: python -m mental_health.train.train
+
+      - name: Promote to "production" only if it does not regress
+        run: python -m mental_health.train.promote

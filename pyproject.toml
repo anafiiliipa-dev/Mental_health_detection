@@ -109,6 +109,16 @@ dev = [
 mlflow = [
     "mlflow>=2.14",
     "boto3>=1.34",
+    # Postgres driver -- needed whenever MLFLOW_TRACKING_URI is postgresql://...
+    # (team shared backend). MLflow's SQLAlchemy store calls into it
+    # internally; it was already required for the shared-backend work to run
+    # at all, just not previously declared here.
+    "psycopg2-binary>=2.9",
+]
+
+# ---- Monitoring (Phase 10): drift detection over the shared MLflow model ----
+monitoring = [
+    "evidently>=0.4,<0.5",
 ]
 
 # ---- Serving API (Phase 6) ----
@@ -134,7 +144,7 @@ rag = [
 
 # ---- Everything (dashboard + heavy notebooks + RAG + dev tooling) ----
 all = [
-    "mental-health-intelligence[streamlit,transformers,nlp,dev,mlflow,api,rag]",
+    "mental-health-intelligence[streamlit,transformers,nlp,dev,mlflow,api,rag,monitoring]",
 ]
 
 [project.urls]

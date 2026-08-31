@@ -1,0 +1,77 @@
+name: Drift monitoring
+
+# Weekly drift check against the "production" model on the shared MLflow
+# backend. Samples a mock batch of "new" messages (mock_stream.py, held-out
+# test split) and compares it to the training reference set with Evidently.
+# Does NOT retrain or promote anything -- observe-and-report only. Opens/
+# updates a GitHub Issue when significant drift is detected (see the last
+# step). Automated retraining lives in its own workflow: retrain.yml.
+on:
+  schedule:
+    # Every Monday at 06:00 UTC -- before the weekly retrain (07:00 UTC).
+    - cron: "0 6 * * 1"
+  workflow_dispatch: {}
+
+jobs:
+  drift-check:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      issues: write
+
+    env:
+      # Shared MLflow backend (Neon Postgres + S3-compatible storage) --
+      # same neondb_owner credential used for training/publishing, per
+      # explicit decision (kept simple for now; can move to a dedicated
+      # read-only CI credential later without any code change).
+      MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+      MLFLOW_ARTIFACT_ROOT: ${{ secrets.MLFLOW_ARTIFACT_ROOT }}
+      AWS_ENDPOINT_URL_S3: ${{ secrets.AWS_ENDPOINT_URL_S3 }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - run: pip install -e ".[api,mlflow,monitoring]"
+
+      - name: Run drift check
+        id: drift
+        run: python -m mental_health.monitoring.drift_check --report-path drift_report.html
+
+      - name: Upload drift report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-report
+          path: drift_report.html
+          retention-days: 30
+
+      - name: Open or update the drift alert issue
+        if: steps.drift.outputs.dataset_drift == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          N_DRIFTED: ${{ steps.drift.outputs.n_drifted_columns }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -e
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --label drift-alert --state open --json number --jq '.[0].number // empty')
+          BODY="Le job de monitoring hebdomadaire (\`drift_monitoring.yml\`) a détecté une dérive significative : **${N_DRIFTED} colonne(s)** en dérive sur l'échantillon simulé.
+
+          Rapport Evidently complet en artifact du run : ${RUN_URL}
+
+          Ceci est un rapport, pas une action automatique -- aucun réentraînement n'est déclenché par cette alerte. Voir \`recap_journee.md\` / la roadmap pour la suite."
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "Drift detected -- $(date -u +%Y-%m-%d)" \
+              --label "drift-alert" \
+              --body "$BODY"
+          fi
