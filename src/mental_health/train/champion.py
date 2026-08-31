@@ -18,6 +18,11 @@ from sklearn.base import clone
 from sklearn.metrics import classification_report, confusion_matrix, f1_score, recall_score
 
 from mental_health.train.benchmark import critical_recall_score
+from mental_health.train.evaluation_metrics import (
+    compute_mcc,
+    compute_pr_auc_per_class,
+    get_ranking_scores,
+)
 
 
 def select_champion_config(nested_summary: pd.DataFrame) -> dict:
@@ -36,6 +41,26 @@ def select_champion_config(nested_summary: pd.DataFrame) -> dict:
         "model_name": champion_row["model"],
         "text_variant": champion_row["text_variant"],
     }
+
+
+def select_runner_up_config(nested_summary: pd.DataFrame) -> dict | None:
+    """
+    Second-ranked (model, text_variant) pair from the nested CV summary —
+    the comparison point for the Phase 11 paired bootstrap significance
+    test (see ``evaluation_metrics.paired_bootstrap_test``): "is the
+    champion actually better than the next-best candidate, or just a
+    lucky split?". Returns ``None`` if the summary has fewer than two
+    ranked rows (e.g. a benchmark run over a single candidate).
+    """
+    ranked = nested_summary.sort_values(
+        by=["robust_score", "critical_recall_mean", "f1_macro_mean"],
+        ascending=False,
+    ).reset_index(drop=True)
+    if len(ranked) < 2:
+        return None
+
+    runner_up_row = ranked.iloc[1].to_dict()
+    return {"model_name": runner_up_row["model"], "text_variant": runner_up_row["text_variant"]}
 
 
 def select_champion_params(nested_best_params: dict, text_variant: str, model_name: str) -> dict:
@@ -69,9 +94,20 @@ def evaluate_final_model(model, X_test, y_test) -> dict:  # noqa: N803
     """
     Evaluate the trained champion on the held-out test set.
 
-    Returns a dict with the three headline metrics, the full per-class
-    classification report, and the confusion matrix — everything the
-    Fase 3d MLflow step will need to log as metrics/artifacts.
+    Returns a dict with the three headline metrics (unchanged — these are
+    what ``promote.py`` gates on), plus two Phase 11 additions that add
+    evaluation rigor without touching that gate:
+
+    - ``mcc``: Matthews Correlation Coefficient, robust to class imbalance.
+    - ``pr_auc_per_class``: average precision per class from the model's
+      raw ranking scores (``predict_proba``/``decision_function``) — more
+      informative than ROC-AUC on the rare critical classes. ``None`` if
+      the model exposes neither (shouldn't happen for this project's
+      registry, but evaluate_final_model must never raise over it).
+
+    Also returns the full per-class classification report and the
+    confusion matrix — everything the Fase 3d MLflow step needs to log as
+    metrics/artifacts.
     """
     y_pred = model.predict(X_test)
 
@@ -83,10 +119,15 @@ def evaluate_final_model(model, X_test, y_test) -> dict:  # noqa: N803
     cm = confusion_matrix(y_test, y_pred, labels=labels)
     confusion_matrix_df = pd.DataFrame(cm, index=labels, columns=labels)
 
+    ranking_scores = get_ranking_scores(model, X_test)
+    pr_auc_per_class = compute_pr_auc_per_class(y_test, ranking_scores, labels) if ranking_scores is not None else None
+
     return {
         "f1_macro": f1_score(y_test, y_pred, average="macro", zero_division=0),
         "recall_macro": recall_score(y_test, y_pred, average="macro", zero_division=0),
         "critical_recall": critical_recall_score(y_test, y_pred),
+        "mcc": compute_mcc(y_test, y_pred),
+        "pr_auc_per_class": pr_auc_per_class,
         "classification_report": classification_report_df,
         "confusion_matrix": confusion_matrix_df,
         "y_pred": y_pred,

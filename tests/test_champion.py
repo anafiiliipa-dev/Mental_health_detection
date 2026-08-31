@@ -119,6 +119,19 @@ class TestTrainAndEvaluateFinalModel:
         assert isinstance(cm, pd.DataFrame)
         assert cm.shape[0] == cm.shape[1]  # square matrix
 
+    def test_evaluate_returns_mcc_and_pr_auc_per_class(self):
+        X, y = _tiny_dataset()
+        class_weights = compute_boosted_class_weights(y)
+        registry = build_model_registry(class_weights)
+
+        model = train_final_model(registry, "LinearSVC_balanced", {"clf__C": 1.0}, X, y)
+        result = evaluate_final_model(model, X, y)
+
+        assert -1.0 <= result["mcc"] <= 1.0
+        assert result["pr_auc_per_class"] is not None
+        assert set(result["pr_auc_per_class"].keys()) == set(y.unique())
+        assert all(0.0 <= v <= 1.0 for v in result["pr_auc_per_class"].values())
+
     def test_train_final_model_does_not_mutate_the_registry(self):
         # clone() must be used internally — fitting the champion must not
         # leave a fitted estimator sitting inside model_registry, which

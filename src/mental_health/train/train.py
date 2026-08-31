@@ -50,6 +50,7 @@ than silently ported:
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import tempfile
 from pathlib import Path
@@ -80,8 +81,10 @@ from mental_health.train.champion import (  # noqa: E402
     evaluate_final_model,
     select_champion_config,
     select_champion_params,
+    select_runner_up_config,
     train_final_model,
 )
+from mental_health.train.evaluation_metrics import paired_bootstrap_test  # noqa: E402
 from mental_health.train.model_registry import (  # noqa: E402
     RANDOM_STATE,
     build_model_registry,
@@ -182,30 +185,79 @@ def run_benchmark_stage(splits: dict, dataset_hash: str) -> tuple[pd.DataFrame, 
     return nested_summary, nested_outputs
 
 
-def run_champion_stage(nested_summary: pd.DataFrame, nested_outputs: dict, splits: dict, dataset_hash: str):
-    """
-    Select the champion (model + text variant), train it on the full
-    training set, evaluate it on the held-out test set, and log everything
-    — including the model artifact — as one MLflow run.
-    """
-    champion_config = select_champion_config(nested_summary)
-    model_name = champion_config["model_name"]
-    text_variant = champion_config["text_variant"]
-
-    champion_params = select_champion_params(nested_outputs, text_variant, model_name)
-
+def _train_and_evaluate(registry: dict, model_name: str, params: dict, splits: dict, text_variant: str) -> tuple:
+    """Train one candidate (model_name/text_variant) on its full training split and evaluate it on its own test split."""
     X_train = splits[text_variant]["X_train"]
     y_train = splits[text_variant]["y_train"]
     X_test = splits[text_variant]["X_test"]
     y_test = splits[text_variant]["y_test"]
 
-    class_weights = compute_boosted_class_weights(y_train)
+    model = train_final_model(registry, model_name, params, X_train, y_train)
+    eval_result = evaluate_final_model(model, X_test, y_test)
+    return model, eval_result, X_train, X_test, y_test
+
+
+def run_champion_stage(nested_summary: pd.DataFrame, nested_outputs: dict, splits: dict, dataset_hash: str):
+    """
+    Select the champion (model + text variant), train it on the full
+    training set, evaluate it on the held-out test set, and log everything
+    — including the model artifact — as one MLflow run.
+
+    Phase 11 addition: also trains the runner-up (second-ranked) candidate
+    on its own held-out test set and runs a paired bootstrap significance
+    test against the champion (same test rows, since ``build_splits`` uses
+    one shared stratified split index across text variants) — "is the
+    champion actually better, or just a lucky split?". This is reporting
+    only: it does NOT change which model gets registered/aliased
+    "staging" — that is still exactly the top-ranked config from the
+    nested CV benchmark, unchanged from before this addition.
+    """
+    champion_config = select_champion_config(nested_summary)
+    model_name = champion_config["model_name"]
+    text_variant = champion_config["text_variant"]
+    champion_params = select_champion_params(nested_outputs, text_variant, model_name)
+
+    class_weights = compute_boosted_class_weights(splits[text_variant]["y_train"])
     registry = build_model_registry(class_weights)
 
     logger.info("Champion selected: %s / %s, params=%s", model_name, text_variant, champion_params)
+    final_model, eval_result, X_train, X_test, y_test = _train_and_evaluate(
+        registry, model_name, champion_params, splits, text_variant
+    )
 
-    final_model = train_final_model(registry, model_name, champion_params, X_train, y_train)
-    eval_result = evaluate_final_model(final_model, X_test, y_test)
+    runner_up_config = select_runner_up_config(nested_summary)
+    significance_result = None
+    if runner_up_config is not None:
+        ru_model_name = runner_up_config["model_name"]
+        ru_text_variant = runner_up_config["text_variant"]
+        ru_params = select_champion_params(nested_outputs, ru_text_variant, ru_model_name)
+        ru_class_weights = compute_boosted_class_weights(splits[ru_text_variant]["y_train"])
+        ru_registry = build_model_registry(ru_class_weights)
+
+        logger.info("Runner-up for significance test: %s / %s, params=%s", ru_model_name, ru_text_variant, ru_params)
+        _, ru_eval_result, _, _, ru_y_test = _train_and_evaluate(
+            ru_registry, ru_model_name, ru_params, splits, ru_text_variant
+        )
+
+        # Valid pairing: build_splits uses ONE stratified index split
+        # (train_test_split on row indices) applied identically to every
+        # text variant, so y_test is the same rows/order regardless of
+        # variant — a plain equality check documents that assumption
+        # rather than silently trusting it.
+        if list(y_test) == list(ru_y_test):
+            significance_result = paired_bootstrap_test(y_test, eval_result["y_pred"], ru_eval_result["y_pred"])
+            significance_result["runner_up_model"] = ru_model_name
+            significance_result["runner_up_text_variant"] = ru_text_variant
+            logger.info(
+                "Significance test (champion vs runner-up %s/%s): diff=%.4f, p=%.4f, significant=%s",
+                ru_model_name, ru_text_variant,
+                significance_result["observed_diff"], significance_result["p_value"],
+                significance_result["significant_at_0.05"],
+            )
+        else:
+            logger.warning(
+                "Champion and runner-up test sets did not align on the same rows — skipping significance test."
+            )
 
     with mlflow.start_run(run_name="champion_final"):
         mlflow.log_param("stage", "champion_final")
@@ -219,6 +271,17 @@ def run_champion_stage(nested_summary: pd.DataFrame, nested_outputs: dict, split
         mlflow.log_metric("f1_macro", eval_result["f1_macro"])
         mlflow.log_metric("recall_macro", eval_result["recall_macro"])
         mlflow.log_metric("critical_recall", eval_result["critical_recall"])
+        mlflow.log_metric("mcc", eval_result["mcc"])
+        if eval_result["pr_auc_per_class"]:
+            for label, value in eval_result["pr_auc_per_class"].items():
+                mlflow.log_metric(f"pr_auc__{label}", value)
+
+        if significance_result is not None:
+            mlflow.log_param("significance_runner_up_model", significance_result["runner_up_model"])
+            mlflow.log_param("significance_runner_up_text_variant", significance_result["runner_up_text_variant"])
+            mlflow.log_metric("significance_observed_diff", significance_result["observed_diff"])
+            mlflow.log_metric("significance_p_value", significance_result["p_value"])
+            mlflow.log_metric("significance_significant", int(significance_result["significant_at_0.05"]))
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_dir = Path(tmp_dir)
@@ -226,6 +289,9 @@ def run_champion_stage(nested_summary: pd.DataFrame, nested_outputs: dict, split
             eval_result["confusion_matrix"].to_csv(tmp_dir / "confusion_matrix.csv")
             mlflow.log_artifact(str(tmp_dir / "classification_report.csv"))
             mlflow.log_artifact(str(tmp_dir / "confusion_matrix.csv"))
+            if significance_result is not None:
+                (tmp_dir / "significance_test.json").write_text(json.dumps(significance_result, indent=2))
+                mlflow.log_artifact(str(tmp_dir / "significance_test.json"))
 
         model_info = mlflow.sklearn.log_model(
             final_model, name="model", registered_model_name=MLFLOW_REGISTERED_MODEL_NAME
@@ -240,8 +306,8 @@ def run_champion_stage(nested_summary: pd.DataFrame, nested_outputs: dict, split
         )
 
         logger.info(
-            "Champion final metrics — f1_macro=%.4f, recall_macro=%.4f, critical_recall=%.4f",
-            eval_result["f1_macro"], eval_result["recall_macro"], eval_result["critical_recall"],
+            "Champion final metrics — f1_macro=%.4f, recall_macro=%.4f, critical_recall=%.4f, mcc=%.4f",
+            eval_result["f1_macro"], eval_result["recall_macro"], eval_result["critical_recall"], eval_result["mcc"],
         )
         logger.info(
             "Registered as '%s' version %s, aliased 'staging'",
