@@ -130,3 +130,13 @@ mlflow-docker.db
 
 # Internal audit notes (not for public repo)
 AUDIT.md
+
+# ============================================================
+# Local-only working notes / backups — never meant for GitHub
+# ============================================================
+# French daily recap kept for Ana's own tracking, not for the public repo.
+recap_journee.md
+# One-off manual backup of the local Docker MLflow store (data-loss scare
+# recovery) — safe to keep locally, but must never be pushed (~5MB binary,
+# and it's a point-in-time snapshot, not something to version).
+mlflow-docker-store.zip
