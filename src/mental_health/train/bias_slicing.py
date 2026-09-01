@@ -66,10 +66,21 @@ def assign_length_slices(texts: pd.Series, n_bins: int = 3, labels: list[str] | 
 
 
 def _slice_metrics(y_true, y_pred) -> dict:
+    # IMPORTANT: labels is pinned to the classes actually present in this
+    # slice's y_true, not left to sklearn's default (the union of y_true
+    # and y_pred). Left at the default, a class slice -- where y_true is a
+    # SINGLE label by construction -- would macro-average over every other
+    # label the model happened to (wrongly) predict in that slice too,
+    # each scored 0 recall by zero_division since it has no true instances
+    # here. That silently drags every slice's score down to near-noise
+    # regardless of how the model actually does on its true label -- not a
+    # subgroup performance measurement at all, just an artifact of how
+    # wrong the model's off-label guesses were.
+    labels = sorted(pd.Series(y_true).unique())
     return {
         "support": len(y_true),
-        "f1_macro": f1_score(y_true, y_pred, average="macro", zero_division=0),
-        "recall_macro": recall_score(y_true, y_pred, average="macro", zero_division=0),
+        "f1_macro": f1_score(y_true, y_pred, labels=labels, average="macro", zero_division=0),
+        "recall_macro": recall_score(y_true, y_pred, labels=labels, average="macro", zero_division=0),
     }
 
 

@@ -77,6 +77,31 @@ class TestEvaluateSlices:
         assert report.iloc[0]["slice"] == "B"
         assert report["f1_macro"].is_monotonic_increasing
 
+    def test_recall_ignores_labels_the_model_wrongly_predicts_outside_this_slice(self):
+        # Regression test: a class slice's y_true is a SINGLE label by
+        # construction (see evaluate_class_slices). If _slice_metrics left
+        # sklearn's `labels` at its default (the union of y_true AND
+        # y_pred), every OTHER label the model wrongly predicted in this
+        # slice would also enter the macro average at 0 recall (no true
+        # instances here), dragging the score toward zero regardless of
+        # how well the model actually does on its true label. Pinning
+        # `labels` to the slice's true classes avoids that.
+        y_true = ["Anxiety"] * 10
+        # The model gets every single one right on its true label, but
+        # (nonsensically, for this synthetic example) also predicts many
+        # other distinct labels elsewhere is not possible here since
+        # y_pred must be same length -- instead, model predicts the
+        # WRONG label on purpose for a couple of rows, using several
+        # distinct wrong labels, to maximise how many "phantom" labels
+        # the buggy default would have pulled into the average.
+        y_pred = ["Anxiety"] * 7 + ["Bipolar", "Depression", "Schizophrenia"]
+
+        report = evaluate_slices(y_true, y_pred, ["A"] * 10)
+
+        # True recall for the "Anxiety" slice is 7/10 = 0.7, independent
+        # of how many distinct wrong labels the model reached for.
+        assert report.iloc[0]["recall_macro"] == pytest.approx(0.7)
+
 
 # ============================================================
 # evaluate_class_slices / evaluate_length_slices
