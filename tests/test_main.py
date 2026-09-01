@@ -107,3 +107,55 @@ class TestModelInfoAndPredictWithRealModel:
         assert body["label"] in {"Anxiety", "Depression"}
         assert body["probabilities"] is not None
         assert np.isclose(sum(body["probabilities"].values()), 1.0, atol=1e-3)
+
+
+class _FakeTransformersPipeline:
+    """
+    Stands in for a HF text-classification pipeline built with
+    ``top_k=None`` (see register_distilbert.py) -- returns real label
+    strings + softmax-normalised scores for every class, the shape
+    ``_predict_with_transformers_model`` expects. Avoids requiring the
+    heavy transformers/torch extra just to test the dispatch/parsing
+    logic on the main.py side.
+    """
+
+    def __call__(self, texts: list[str]):
+        return [[
+            {"label": "Anxiety", "score": 0.82},
+            {"label": "Depression", "score": 0.10},
+            {"label": "ADHD", "score": 0.08},
+        ]]
+
+
+class TestPredictWithTransformersFlavor:
+    """
+    A promoted DistilBERT candidate must be servable through /predict too
+    -- not just loadable (see test_model_loader.py's TestFlavorDispatch).
+    Bypasses load_production_model entirely (monkeypatched) so this test
+    doesn't need a real transformers-flavored MLflow model or the
+    transformers/torch extra installed.
+    """
+
+    def test_predict_uses_the_transformers_pipeline_when_flavor_is_transformers(self, mlflow_tmp_registry, mocker):
+        from mental_health.api.model_loader import LoadedModel
+
+        fake_loaded = LoadedModel(
+            model=_FakeTransformersPipeline(),
+            flavor="transformers",
+            version="7",
+            run_id="fake_run_id",
+            metrics={"f1_macro": 0.95, "critical_recall": 0.90},
+            error=None,
+        )
+        mocker.patch.object(main_module, "load_production_model", return_value=fake_loaded)
+
+        with TestClient(main_module.app) as client:
+            resp = client.post("/predict", json={"text": "I feel really anxious lately"})
+
+        body = resp.json()
+        assert resp.status_code == 200
+        assert body["is_demo_fallback"] is False
+        assert body["label"] == "Anxiety"
+        assert body["confidence"] == pytest.approx(0.82)
+        assert body["probabilities"] == {"Anxiety": pytest.approx(0.82), "Depression": pytest.approx(0.10), "ADHD": pytest.approx(0.08)}
+        assert np.isclose(sum(body["probabilities"].values()), 1.0, atol=1e-3)

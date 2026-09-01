@@ -69,6 +69,8 @@ gcloud run deploy mental-health-api \
   --platform=managed \
   --allow-unauthenticated \
   --port=8000 \
+  --memory=2Gi \
+  --cpu=2 \
   --set-env-vars="MLFLOW_TRACKING_URI=postgresql://aamir_cloudrun:<PGPASSWORD>@ep-fancy-dream-ayjyumxu-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require" \
   --set-env-vars="MLFLOW_ARTIFACT_ROOT=s3://mental-health-mlops/mlflow-artifacts" \
   --set-env-vars="AWS_ENDPOINT_URL_S3=https://br-odd-rice-ayn2901i.storage.c-5.us-east-2.aws.neon.tech" \
@@ -82,6 +84,18 @@ from the credential files Ana sent him directly (never commit these, never
 paste them in a group chat/issue). `AWS_REGION` and `AWS_ENDPOINT_URL_S3`
 must match the S3-compatible storage's actual region/endpoint exactly —
 double-check against the credential file rather than retyping from memory.
+
+`--memory=2Gi --cpu=2` (Cloud Run's default is 512Mi/1 CPU) — needed
+because the Docker image now installs the `transformers` extra so the API
+can serve a DistilBERT candidate if `promote.py` ever puts one in
+"production" (see the Dockerfile's comment): torch plus a loaded
+DistilBERT checkpoint does not fit in the default 512Mi and would crash
+the container with an OOM at startup. If production is a lightweight
+scikit-learn model (the common case), this is more memory than strictly
+needed, but Cloud Run only bills for actual CPU/memory *used* during
+request handling (not a fixed reservation cost the way a VM would be), so
+the safety margin is cheap relative to an OOM crash on the day a
+DistilBERT version does get promoted.
 
 **Better than `--set-env-vars` for the two actual secrets** (`MLFLOW_TRACKING_URI`
 embeds the DB password; `AWS_SECRET_ACCESS_KEY` is the S3 secret): once

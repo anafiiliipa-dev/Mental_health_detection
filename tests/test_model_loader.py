@@ -47,6 +47,7 @@ class TestLoadProductionModel:
 
         assert result.is_available is True
         assert result.error is None
+        assert result.flavor == "sklearn"
         assert result.version == str(version)
         assert result.run_id == run_id
         assert result.metrics["f1_macro"] == pytest.approx(0.8)
@@ -70,3 +71,50 @@ class TestLoadProductionModel:
 
         assert result.is_available is False
         assert result.error is not None
+
+
+class TestFlavorDispatch:
+    """
+    A promoted DistilBERT candidate (register_distilbert.py,
+    mlflow.transformers.log_model) must be loadable too -- promote.py's
+    gate is metrics-only and has no notion of model type. These tests
+    stand in for a real transformers-flavored model with a mock (rather
+    than requiring the heavy transformers/torch extra just to test the
+    dispatch logic), the same way test_distilbert_finetune.py avoids a
+    real fine-tune.
+    """
+
+    def test_dispatches_to_the_transformers_loader_for_a_transformers_flavored_version(
+        self, mlflow_tmp_registry, mocker
+    ):
+        version, run_id = _log_and_register_version("loader_m3", {"f1_macro": 0.8, "critical_recall": 0.7})
+        client = mlflow.MlflowClient()
+        client.set_registered_model_alias("loader_m3", "production", version)
+
+        fake_pipeline = object()
+        mocker.patch("mental_health.api.model_loader._detect_flavor", return_value="transformers")
+        mocker.patch("mlflow.transformers.load_model", return_value=fake_pipeline, create=True)
+
+        result = load_production_model("loader_m3")
+
+        assert result.is_available is True
+        assert result.flavor == "transformers"
+        assert result.model is fake_pipeline
+        assert result.run_id == run_id
+
+    def test_unsupported_flavor_is_reported_as_error_not_raised(self, mlflow_tmp_registry, mocker):
+        version, _ = _log_and_register_version("loader_m4", {"f1_macro": 0.8, "critical_recall": 0.7})
+        client = mlflow.MlflowClient()
+        client.set_registered_model_alias("loader_m4", "production", version)
+
+        mocker.patch(
+            "mental_health.api.model_loader._detect_flavor",
+            side_effect=ValueError("Unsupported model flavor(s) ['onnx'] -- expected one of ('sklearn', 'transformers')"),
+        )
+
+        result = load_production_model("loader_m4")
+
+        assert result.is_available is False
+        assert result.model is None
+        assert result.flavor is None
+        assert "Unsupported model flavor" in result.error

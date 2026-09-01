@@ -91,8 +91,7 @@ def _text_fingerprint(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
 
 
-def _predict_with_real_model(loaded: LoadedModel, text: str) -> PredictResponse:
-    model = loaded.model
+def _predict_with_sklearn_model(model, text: str) -> PredictResponse:
     prediction = model.predict([text])[0]
 
     probabilities: dict[str, float] | None = None
@@ -115,6 +114,33 @@ def _predict_with_real_model(loaded: LoadedModel, text: str) -> PredictResponse:
     return PredictResponse(
         label=str(prediction), confidence=confidence, probabilities=probabilities, is_demo_fallback=False
     )
+
+
+def _predict_with_transformers_model(pipeline, text: str) -> PredictResponse:
+    """
+    ``pipeline`` is a HF ``text-classification`` pipeline built with
+    ``top_k=None`` (see ``register_distilbert.py``) — calling it on a batch
+    of one text returns one list of ``{"label", "score"}`` dicts covering
+    every class, already softmax-normalised by the pipeline itself, with
+    real label strings (not "LABEL_0") because the fine-tuned model's
+    config carries the ``id2label`` mapping baked in at training time
+    (``distilbert_finetune.py``).
+    """
+    scores = pipeline([text])[0]
+    probabilities = {item["label"]: float(item["score"]) for item in scores}
+    best = max(scores, key=lambda item: item["score"])
+
+    return PredictResponse(
+        label=str(best["label"]), confidence=float(best["score"]), probabilities=probabilities, is_demo_fallback=False
+    )
+
+
+def _predict_with_real_model(loaded: LoadedModel, text: str) -> PredictResponse:
+    """Dispatch on the loaded model's flavor (see model_loader.py) — the
+    two shapes of "real model" this API can currently serve."""
+    if loaded.flavor == "transformers":
+        return _predict_with_transformers_model(loaded.model, text)
+    return _predict_with_sklearn_model(loaded.model, text)
 
 
 @app.get("/health", response_model=HealthResponse)

@@ -25,7 +25,7 @@ COPY src/ ./src/
 
 # Only the API + MLflow client are needed to *serve* a model — no dev/test
 # tooling, no Streamlit, no transformers/RAG stack in this image.
-RUN pip install --no-cache-dir -e ".[api,mlflow]"
+RUN pip install --no-cache-dir -e ".[api,mlflow,transformers]"
 
 EXPOSE 8000
 
