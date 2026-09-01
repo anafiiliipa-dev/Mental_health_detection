@@ -7,7 +7,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
     steps:
     - uses: actions/checkout@v3
     - uses: actions/setup-python@v4
@@ -17,11 +16,36 @@ jobs:
     - run: ruff check .
     - run: pytest -v
     - run: docker build -t mental-health-api .
-    - name: Push image to GHCR (main only)
+
+    # Publishes to GCP Artifact Registry (the Cloud Run deployment target,
+    # docs/architecture.md), not GHCR — replaces the previous GHCR push.
+    # Requires three repo VARIABLES (Settings > Secrets and variables >
+    # Actions > Variables — not secret, just config) and one repo SECRET:
+    #   GCP_PROJECT_ID  — the GCP project Aamir created for Cloud Run
+    #   GCP_REGION      — e.g. europe-west1 (must match the Artifact
+    #                      Registry repo's region and the Cloud Run
+    #                      service's region)
+    #   GCP_AR_REPO     — the Artifact Registry repository name (created
+    #                      once via `gcloud artifacts repositories create`,
+    #                      see docs/deployment.md)
+    #   GCP_SA_KEY (secret) — JSON key for a service account with the
+    #                      "Artifact Registry Writer" role on that repo,
+    #                      pasted whole as the secret value
+    - name: Authenticate to GCP (main only)
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up gcloud (main only)
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Push image to GCP Artifact Registry (main only)
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: |
-        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-        IMAGE=ghcr.io/${{ github.repository_owner }}/mental-health-api
+        gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+        IMAGE="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_AR_REPO }}/mental-health-api"
         docker tag mental-health-api "$IMAGE:latest"
         docker tag mental-health-api "$IMAGE:${{ github.sha }}"
         docker push "$IMAGE:latest"

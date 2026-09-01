@@ -1,11 +1,13 @@
 # syntax=docker/dockerfile:1
 
-# Phase 7: containerizes the FastAPI service (Phase 6) only. MLflow stays
-# local SQLite — mlflow.db / mlruns/ are mounted as a volume at `docker run`
-# time (see docker-compose.yml), never baked into the image. A shared
-# Postgres + S3 backend is deferred to Phase 13 (AWS), per the project's
-# explicit "AWS not before Phase 13" rule — bringing it forward here would
-# be scope creep this phase doesn't need.
+# Phase 7: containerizes the FastAPI service (Phase 6) only — Streamlit
+# runs locally, never containerized (docs/architecture.md). Cloud Run
+# deployment (Phase 13) now points MLFLOW_TRACKING_URI / MLFLOW_ARTIFACT_ROOT
+# at the shared Neon Postgres + S3-compatible backend instead of local
+# SQLite — those are read from the environment at container start (see
+# config/mlflow_config.py), never baked into the image. Set them (and the
+# AWS_* S3 credentials) as Cloud Run env vars / secrets at deploy time; see
+# docs/deployment.md.
 FROM python:3.12-slim
 
 # PYTHONUNBUFFERED: log lines show up immediately, not buffered until the
