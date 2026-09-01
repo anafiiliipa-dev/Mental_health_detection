@@ -118,15 +118,24 @@ def _predict_with_sklearn_model(model, text: str) -> PredictResponse:
 
 def _predict_with_transformers_model(pipeline, text: str) -> PredictResponse:
     """
-    ``pipeline`` is a HF ``text-classification`` pipeline built with
-    ``top_k=None`` (see ``register_distilbert.py``) — calling it on a batch
-    of one text returns one list of ``{"label", "score"}`` dicts covering
-    every class, already softmax-normalised by the pipeline itself, with
-    real label strings (not "LABEL_0") because the fine-tuned model's
-    config carries the ``id2label`` mapping baked in at training time
-    (``distilbert_finetune.py``).
+    ``pipeline`` is a HF ``text-classification`` pipeline (see
+    ``register_distilbert.py``) with real label strings (not "LABEL_0")
+    because the fine-tuned model's config carries the ``id2label`` mapping
+    baked in at training time (``distilbert_finetune.py``).
+
+    ``top_k=None`` is passed explicitly on every call, NOT relied upon as
+    the pipeline's baked-in default: a pipeline built with ``top_k=None``
+    and then round-tripped through ``mlflow.transformers.log_model`` /
+    ``load_model`` does not necessarily keep that setting (observed in
+    practice — the reloaded pipeline silently fell back to ``top_k=1``,
+    returning one ``{"label", "score"}`` dict per input instead of a list
+    covering every class, which crashed the dict comprehension below with
+    a confusing "string indices must be integers" — iterating a dict
+    yields its string keys). Passing ``top_k=None`` here every time is
+    what actually determines the output shape, regardless of what MLflow
+    preserved from registration.
     """
-    scores = pipeline([text])[0]
+    scores = pipeline([text], top_k=None)[0]
     probabilities = {item["label"]: float(item["score"]) for item in scores}
     best = max(scores, key=lambda item: item["score"])
 
