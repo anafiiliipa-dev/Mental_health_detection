@@ -6,11 +6,29 @@ name: Drift monitoring
 # Does NOT retrain or promote anything -- observe-and-report only. Opens/
 # updates a GitHub Issue when significant drift is detected (see the last
 # step). Automated retraining lives in its own workflow: retrain.yml.
+#
+# Decision with Ana: the scheduled run always passes --simulate-drift.
+# There is no live production traffic yet, so an honest holdout sample is
+# drawn from the exact same distribution as training and essentially
+# never trips Evidently's drift preset -- with a real sample this job
+# would silently do nothing, every week, and the detection -> alert ->
+# retrain loop could never actually be watched running end-to-end.
+# simulate_drift (mock_stream.sample_mock_batch) instead draws a
+# deliberately skewed batch every run, so a real alert fires weekly and
+# retrain.yml's already-unconditional weekly retrain can be watched
+# picking up a fresh model afterward. This is a deliberate choice for
+# demonstrating the pipeline, NOT a realistic traffic simulation --
+# revisit once there is real request-log traffic to sample from instead.
 on:
   schedule:
     # Every Monday at 06:00 UTC -- before the weekly retrain (07:00 UTC).
     - cron: "0 6 * * 1"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      simulate_drift:
+        description: "Force a deliberately skewed (guaranteed-drift) sample instead of an honest holdout sample"
+        type: boolean
+        default: true
 
 jobs:
   drift-check:
@@ -43,7 +61,14 @@ jobs:
 
       - name: Run drift check
         id: drift
-        run: python -m mental_health.monitoring.drift_check --report-path drift_report.html
+        env:
+          SIMULATE_DRIFT: ${{ github.event_name == 'schedule' && 'true' || (inputs.simulate_drift && 'true' || 'false') }}
+        run: |
+          if [ "$SIMULATE_DRIFT" = "true" ]; then
+            python -m mental_health.monitoring.drift_check --report-path drift_report.html --simulate-drift
+          else
+            python -m mental_health.monitoring.drift_check --report-path drift_report.html
+          fi
 
       - name: Upload drift report
         if: always()
@@ -62,11 +87,11 @@ jobs:
         run: |
           set -e
           EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --label drift-alert --state open --json number --jq '.[0].number // empty')
-          BODY="Le job de monitoring hebdomadaire (\`drift_monitoring.yml\`) a détecté une dérive significative : **${N_DRIFTED} colonne(s)** en dérive sur l'échantillon simulé.
+          BODY="Le job de monitoring hebdomadaire (\`drift_monitoring.yml\`) a détecté une dérive significative : **${N_DRIFTED} colonne(s)** en dérive.
 
           Rapport Evidently complet en artifact du run : ${RUN_URL}
 
-          Ceci est un rapport, pas une action automatique -- aucun réentraînement n'est déclenché par cette alerte. Voir \`recap_journee.md\` / la roadmap pour la suite."
+          Ceci est un rapport, pas une action automatique -- aucun réentraînement n'est déclenché directement par cette alerte (le réentraînement hebdomadaire de \`retrain.yml\` tourne de toute façon, indépendamment). Voir \`recap_journee.md\` / la roadmap pour la suite."
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY"
           else

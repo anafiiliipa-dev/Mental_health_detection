@@ -66,12 +66,36 @@ def _score(model, texts: pd.Series) -> list[str]:
     return [str(p) for p in model.predict(list(texts))]
 
 
+def _confidence(model, texts: pd.Series) -> list[float] | None:
+    """
+    Top-class predicted probability per row (``max(predict_proba(x))``) —
+    ``None`` when the model has no ``predict_proba`` at all (defensive
+    only: since Phase 11 the served champion is always calibrated via
+    CalibratedClassifierCV, so this should always be available in
+    practice, but drift_check.py must not hard-crash if a future change
+    ever registers an uncalibrated model).
+
+    Requested by a teammate reviewing the monitoring setup: label/length
+    drift alone can miss a real shift — a model can keep predicting the
+    same labels while becoming steadily less sure of them. Tracking
+    confidence as its own numerical column lets Evidently flag that too.
+    """
+    if not hasattr(model, "predict_proba"):
+        return None
+    proba = model.predict_proba(list(texts))
+    return [float(row.max()) for row in proba]
+
+
 def build_drift_frames(model, reference_df: pd.DataFrame, current_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Build the two columns Evidently compares: ``text_length`` (numerical
-    drift) and ``prediction`` (the model's own output — categorical/target
-    drift), for the reference set vs the current sampled batch.
+    Build the columns Evidently compares between the reference set and the
+    current sampled batch: ``text_length`` and ``prediction`` (categorical/
+    target drift) always, plus ``prediction_confidence`` (numerical drift)
+    whenever the model exposes real probabilities.
     """
+    reference_confidence = _confidence(model, reference_df[TEXT_COL])
+    current_confidence = _confidence(model, current_df[TEXT_COL])
+
     reference = pd.DataFrame(
         {
             "text_length": reference_df[TEXT_COL].str.len(),
@@ -84,10 +108,17 @@ def build_drift_frames(model, reference_df: pd.DataFrame, current_df: pd.DataFra
             "prediction": _score(model, current_df[TEXT_COL]),
         }
     )
+
+    if reference_confidence is not None and current_confidence is not None:
+        reference["prediction_confidence"] = reference_confidence
+        current["prediction_confidence"] = current_confidence
+
     return reference, current
 
 
-def run_drift_check(batch_size: int = DEFAULT_BATCH_SIZE, report_path: str = "drift_report.html") -> dict:
+def run_drift_check(
+    batch_size: int = DEFAULT_BATCH_SIZE, report_path: str = "drift_report.html", simulate_drift: bool = False
+) -> dict:
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 
     loaded = load_production_model()
@@ -96,7 +127,7 @@ def run_drift_check(batch_size: int = DEFAULT_BATCH_SIZE, report_path: str = "dr
 
     df = pd.read_csv(DEFAULT_CLEAN_DATA_PATH)
     reference_df, holdout_pool = build_reference_and_holdout(df)
-    current_df = sample_mock_batch(holdout_pool, n=batch_size)
+    current_df = sample_mock_batch(holdout_pool, n=batch_size, simulate_drift=simulate_drift)
 
     reference, current = build_drift_frames(loaded.model, reference_df, current_df)
 
@@ -121,6 +152,7 @@ def run_drift_check(batch_size: int = DEFAULT_BATCH_SIZE, report_path: str = "dr
     with mlflow.start_run(run_name="drift_check"):
         mlflow.log_param("model_version", loaded.version)
         mlflow.log_param("batch_size", len(current_df))
+        mlflow.log_param("simulate_drift", simulate_drift)
         mlflow.log_metric("dataset_drift", int(dataset_drift))
         mlflow.log_metric("n_drifted_columns", n_drifted)
         mlflow.log_artifact(report_path)
@@ -146,10 +178,21 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the drift-monitoring check against the production model.")
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
     parser.add_argument("--report-path", type=str, default="drift_report.html")
+    parser.add_argument(
+        "--simulate-drift",
+        action="store_true",
+        help=(
+            "Deliberately sample a skewed batch instead of an honest holdout "
+            "sample, so a drift alert reliably fires. For exercising the "
+            "detection -> alert -> retrain loop on a predictable cadence "
+            "while there is no live production traffic yet -- NOT a "
+            "realistic traffic simulation."
+        ),
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    result = run_drift_check(batch_size=args.batch_size, report_path=args.report_path)
+    result = run_drift_check(batch_size=args.batch_size, report_path=args.report_path, simulate_drift=args.simulate_drift)
     logger.info("Drift check complete: %s", result)
     _write_github_output(result)
 
