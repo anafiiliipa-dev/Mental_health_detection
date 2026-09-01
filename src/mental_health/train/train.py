@@ -394,6 +394,14 @@ def run_champion_stage(
             skops_trusted_types=[
                 "sklearn.calibration._CalibratedClassifier",
                 "sklearn.calibration._SigmoidCalibration",
+                # Phase 11: our own EmbeddingVectorizer -- not a sklearn
+                # built-in, so skops treats it as untrusted by default. It
+                # is our code, not arbitrary third-party code, so trusting
+                # it here is safe -- same rationale as the calibration
+                # internals above. Only relevant when the champion actually
+                # is Embedding_LogReg/Embedding_SVM; harmless to always
+                # declare it otherwise.
+                "mental_health.train.embedding_wrapper.EmbeddingVectorizer",
             ],
         )
 
