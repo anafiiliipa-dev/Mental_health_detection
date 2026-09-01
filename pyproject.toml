@@ -252,6 +252,9 @@ ignore = [
 "src/mental_health/models/services.py" = ["N806"]      # _UPPER_CASE locals are private constants by convention
 "src/mental_health/train/benchmark.py" = ["N803", "N806"]  # X_train/X_dev is the standard sklearn matrix convention
 "src/mental_health/train/train.py" = ["N806"]          # X_train/X_test is the standard sklearn matrix convention
+"src/mental_health/train/robustness.py" = ["N803", "N806"]        # X_test is the standard sklearn matrix convention
+"src/mental_health/train/bias_slicing.py" = ["N806"]               # X_test is the standard sklearn matrix convention
+"src/mental_health/train/distilbert_finetune.py" = ["N803", "N806"]  # X_train/X_test is the standard sklearn matrix convention
 "notebooks/*" = ["ALL"]
 
 [tool.ruff.format]
