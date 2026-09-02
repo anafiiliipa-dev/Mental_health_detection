@@ -32,17 +32,17 @@ jobs:
     #                      "Artifact Registry Writer" role on that repo,
     #                      pasted whole as the secret value
     - name: Authenticate to GCP (main only)
-      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.GCP_PROJECT_ID != ''
       uses: google-github-actions/auth@v2
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Set up gcloud (main only)
-      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.GCP_PROJECT_ID != ''
       uses: google-github-actions/setup-gcloud@v2
 
     - name: Push image to GCP Artifact Registry (main only)
-      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.GCP_PROJECT_ID != ''
       run: |
         gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
         IMAGE="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_AR_REPO }}/mental-health-api"
