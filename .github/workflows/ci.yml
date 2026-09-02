@@ -50,3 +50,39 @@ jobs:
         docker tag mental-health-api "$IMAGE:${{ github.sha }}"
         docker push "$IMAGE:latest"
         docker push "$IMAGE:${{ github.sha }}"
+
+    # Deploys the image just pushed above to Cloud Run, so the API is
+    # reachable at a public HTTPS URL instead of only on localhost. Needs
+    # the SAME three repo variables + GCP_SA_KEY secret as the push step
+    # above (the service account also needs the "Cloud Run Admin" role, not
+    # just "Artifact Registry Writer" -- ask Aamir to grant it if this step
+    # fails with a permission error), PLUS the MLflow/S3 secrets that were
+    # already added for drift_monitoring.yml / retrain.yml (MLFLOW_TRACKING_URI,
+    # MLFLOW_ARTIFACT_ROOT, MLFLOW_S3_ENDPOINT_URL, AWS_ENDPOINT_URL_S3,
+    # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION) -- the container
+    # never bakes these in (see the Dockerfile comment), it reads them from
+    # the environment at startup, exactly like running it locally with a
+    # .env file.
+    - name: Deploy to Cloud Run (main only)
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.GCP_PROJECT_ID != ''
+      run: |
+        IMAGE="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_AR_REPO }}/mental-health-api:${{ github.sha }}"
+        gcloud run deploy mental-health-api \
+          --image "$IMAGE" \
+          --region "${{ vars.GCP_REGION }}" \
+          --platform managed \
+          --allow-unauthenticated \
+          --port 8000 \
+          --memory 2Gi \
+          --set-env-vars "MLFLOW_TRACKING_URI=${{ secrets.MLFLOW_TRACKING_URI }}" \
+          --set-env-vars "MLFLOW_ARTIFACT_ROOT=${{ secrets.MLFLOW_ARTIFACT_ROOT }}" \
+          --set-env-vars "MLFLOW_S3_ENDPOINT_URL=${{ secrets.MLFLOW_S3_ENDPOINT_URL }}" \
+          --set-env-vars "AWS_ENDPOINT_URL_S3=${{ secrets.AWS_ENDPOINT_URL_S3 }}" \
+          --set-env-vars "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" \
+          --set-env-vars "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+          --set-env-vars "AWS_REGION=${{ secrets.AWS_REGION }}"
+
+    - name: Show the deployed API URL (main only)
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.GCP_PROJECT_ID != ''
+      run: |
+        gcloud run services describe mental-health-api --region "${{ vars.GCP_REGION }}" --format="value(status.url)"
