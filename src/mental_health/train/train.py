@@ -100,7 +100,7 @@ logger = logging.getLogger(__name__)
 # la source de vérité unique partagée avec promote.py et le service FastAPI
 # (Phase 6), afin que le code de service n'ait pas besoin d'importer ce module d'entraînement.
 TEST_SIZE = 0.2
-TEXT_VARIANTS = ["raw"]  # temporairement réduit pour la rapidité de la démo -- restaurer ["raw", "masked"] pour le benchmark officiel
+TEXT_VARIANTS = ["raw", "masked"]
 VARIANT_COLUMNS = {"raw": TEXT_COL, "masked": MASKED_COL}
 
 
@@ -170,9 +170,7 @@ def run_benchmark_stage(
             mlflow.log_param("candidate_models", list(registry.keys()))
 
             logger.info("Running nested CV benchmark — variant=%s", text_variant)
-            _, summary, best_params = run_nested_cv_benchmark(
-                X_train, y_train, registry, outer_splits=2, inner_splits=2, max_candidates=2
-            )  # temporairement réduit pour la rapidité de la démo -- restaurer les valeurs par défaut pour le benchmark officiel
+            _, summary, best_params = run_nested_cv_benchmark(X_train, y_train, registry)
             summary = summary.copy()
             summary["text_variant"] = text_variant
 
