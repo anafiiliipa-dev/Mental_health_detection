@@ -185,6 +185,14 @@ def predict(request: PredictRequest) -> PredictResponse:
 
     # Never log request.text — a hash + length is enough to debug volume/traffic
     # without ever persisting raw mental-health text in application logs.
+    #
+    # probabilities IS included (unlike the text): it never reveals
+    # anything about the submitted text beyond what predicted_label
+    # already does (the predicted class), and having the full per-class
+    # distribution in the log -- not just the top label -- is useful for
+    # spotting low-confidence predictions and, later, feeding the
+    # Evidently monitoring/drift checks (mental_health.monitoring) without
+    # needing to re-run inference.
     logger.info(
         "predict request",
         extra={
@@ -193,6 +201,7 @@ def predict(request: PredictRequest) -> PredictResponse:
             "is_demo_fallback": response.is_demo_fallback,
             "model_version": loaded.version,
             "predicted_label": response.label,
+            "probabilities": response.probabilities,
             "latency_ms": latency_ms,
         },
     )

@@ -161,3 +161,28 @@ class TestPredictWithTransformersFlavor:
         assert body["confidence"] == pytest.approx(0.82)
         assert body["probabilities"] == {"Anxiety": pytest.approx(0.82), "Depression": pytest.approx(0.10), "ADHD": pytest.approx(0.08)}
         assert np.isclose(sum(body["probabilities"].values()), 1.0, atol=1e-3)
+
+
+class TestPredictLogging:
+    """
+    The structured log for every /predict call must include the full
+    per-class probabilities (not just predicted_label) -- useful for
+    spotting low-confidence predictions and feeding monitoring/drift
+    checks later -- while still never logging the submitted text itself.
+    """
+
+    def test_predict_request_log_includes_probabilities_but_never_the_text(self, mlflow_tmp_registry, caplog):
+        _register_production_model()
+        secret_text = "I feel so anxious and worried"
+        with caplog.at_level("INFO", logger="mental_health.api.main"):
+            with TestClient(main_module.app) as client:
+                client.post("/predict", json={"text": secret_text})
+
+        records = [r for r in caplog.records if r.getMessage() == "predict request"]
+        assert len(records) == 1
+        record = records[0]
+
+        assert record.probabilities is not None
+        assert set(record.probabilities.keys()) == {"Anxiety", "Depression"}
+        assert np.isclose(sum(record.probabilities.values()), 1.0, atol=1e-3)
+        assert secret_text not in str(record.__dict__)
