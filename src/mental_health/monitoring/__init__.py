@@ -1,14 +1,14 @@
 """
-Monitoring package (Phase 10 completion): the drift-detection loop.
+Package de monitoring (fin de la Phase 10) : la boucle de détection de drift.
 
-- ``mock_stream``: simulates the arrival of new incoming messages by
-  sampling from the training dataset's held-out test split, since the
-  project has no live traffic yet (documented stand-in — architecture
-  diagram nodes 02/15/16).
-- ``drift_check``: scores a sampled batch with the current "production"
-  model and compares it against the training reference set using
-  Evidently, producing an HTML report and an MLflow-logged summary.
+- ``mock_stream`` : simule l'arrivée de nouveaux messages entrants en
+  échantillonnant le split de test mis de côté du jeu de données d'entraînement,
+  car le projet n'a pas encore de trafic réel (substitut documenté — nœuds 02/15/16
+  du diagramme d'architecture).
+- ``drift_check`` : score un lot échantillonné avec le modèle "production"
+  actuel et le compare au jeu de référence d'entraînement en utilisant
+  Evidently, produisant un rapport HTML et un résumé consigné dans MLflow.
 
-Deliberately does NOT trigger retraining — that decision belongs to
-Phase 12 (automated retraining trigger), not here.
+Ne déclenche volontairement PAS de réentraînement — cette décision relève de
+la Phase 12 (déclenchement automatique du réentraînement), pas d'ici.
 """

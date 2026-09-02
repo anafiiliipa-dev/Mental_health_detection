@@ -1,31 +1,31 @@
 """
-Extra evaluation metrics and statistical rigor (Phase 11, first slice).
+Métriques d'évaluation supplémentaires et rigueur statistique (Phase 11, première tranche).
 
-Layered on top of the existing champion evaluation
-(``champion.evaluate_final_model``) without touching its established
-headline metrics (``f1_macro``, ``recall_macro``, ``critical_recall``) or
-the promotion gate in ``promote.py``, which still only looks at those
-three -- this module adds evaluation rigor, it does not change any
-automated decision already in production.
+Vient s'ajouter à l'évaluation champion existante
+(``champion.evaluate_final_model``) sans toucher à ses métriques
+principales déjà établies (``f1_macro``, ``recall_macro``, ``critical_recall``) ni
+à la porte de promotion dans ``promote.py``, qui ne regarde toujours que ces
+trois métriques -- ce module ajoute de la rigueur d'évaluation, il ne change aucune
+décision automatisée déjà en production.
 
-- **MCC** (Matthews Correlation Coefficient): robust to class imbalance,
-  needs only predicted labels -- no calibration required.
-- **PR-AUC per class**: more informative than ROC-AUC on the rare,
-  clinically critical classes (Bipolar, Schizophrenia). Computed from raw
-  decision/probability scores (works for LinearSVC via
-  ``decision_function``, which has no ``predict_proba``) -- this is a
-  ranking metric, so it does NOT require the model to be calibrated.
-- **Paired bootstrap significance test**: resamples the held-out test set
-  (same rows for both models) to estimate whether an observed metric gap
-  between two models is likely real or just noise -- answers "is this
-  actually a better model, or did it just get a lucky split?".
+- **MCC** (coefficient de corrélation de Matthews) : robuste au déséquilibre des classes,
+  ne nécessite que les labels prédits -- aucune calibration requise.
+- **PR-AUC par classe** : plus informatif que le ROC-AUC sur les classes rares et
+  cliniquement critiques (Bipolaire, Schizophrénie). Calculé à partir des scores bruts
+  de décision/probabilité (fonctionne pour LinearSVC via
+  ``decision_function``, qui n'a pas de ``predict_proba``) -- c'est une
+  métrique de classement, elle ne nécessite donc PAS que le modèle soit calibré.
+- **Test de significativité par bootstrap apparié** : rééchantillonne l'ensemble de test mis de côté
+  (mêmes lignes pour les deux modèles) pour estimer si un écart de métrique observé
+  entre deux modèles est probablement réel ou juste du bruit -- répond à "est-ce
+  vraiment un meilleur modèle, ou a-t-il simplement eu un split chanceux ?".
 
-Calibration itself (Platt scaling / ``CalibratedClassifierCV``) and the
-metrics that depend on it (Brier score, Expected Calibration Error) are a
-separate, later slice of Phase 11 -- computing them against an
-uncalibrated decision_function softmax (as the API's confidence score
-already does, informally) would be misleading, so they are deliberately
-NOT included here.
+La calibration elle-même (Platt scaling / ``CalibratedClassifierCV``) et les
+métriques qui en dépendent (Brier score, Expected Calibration Error) constituent une
+tranche ultérieure et distincte de la Phase 11 -- les calculer sur un
+softmax de decision_function non calibré (comme le fait déjà, de manière informelle,
+le score de confiance de l'API) serait trompeur, donc elles ne sont délibérément
+PAS incluses ici.
 """
 from __future__ import annotations
 
@@ -36,16 +36,16 @@ from sklearn.preprocessing import label_binarize
 
 
 def compute_mcc(y_true, y_pred) -> float:
-    """Matthews Correlation Coefficient -- robust to class imbalance, unlike accuracy or F1 alone."""
+    """Coefficient de corrélation de Matthews -- robuste au déséquilibre des classes, contrairement à l'accuracy ou au F1 seul."""
     return float(matthews_corrcoef(y_true, y_pred))
 
 
 def get_ranking_scores(model, X):  # noqa: N803
     """
-    Best-effort per-class ranking scores for PR-AUC: ``predict_proba`` if
-    the model has it (LogisticRegression, MultinomialNB), else
-    ``decision_function`` (LinearSVC). Returns ``None`` if neither exists,
-    so callers can skip PR-AUC gracefully instead of raising.
+    Scores de classement par classe, au mieux, pour le PR-AUC : ``predict_proba`` si
+    le modèle le possède (LogisticRegression, MultinomialNB), sinon
+    ``decision_function`` (LinearSVC). Retourne ``None`` si aucun des deux n'existe,
+    afin que les appelants puissent ignorer le PR-AUC proprement plutôt que de lever une exception.
     """
     if hasattr(model, "predict_proba"):
         return model.predict_proba(X)
@@ -56,13 +56,13 @@ def get_ranking_scores(model, X):  # noqa: N803
 
 def compute_pr_auc_per_class(y_true, scores: np.ndarray, labels: list[str]) -> dict[str, float]:
     """
-    Average precision (area under the precision-recall curve) per class,
-    from ``get_ranking_scores`` output. A ranking metric -- valid on raw,
-    uncalibrated decision_function scores, unlike Brier score/ECE.
+    Précision moyenne (aire sous la courbe précision-rappel) par classe,
+    à partir de la sortie de ``get_ranking_scores``. Une métrique de classement -- valide sur des scores
+    decision_function bruts et non calibrés, contrairement au Brier score/ECE.
 
-    Handles the binary case explicitly: ``label_binarize`` collapses two
-    classes into a single column (the positive class = ``labels[1]``),
-    unlike the one-column-per-class shape it returns for 3+ classes.
+    Gère explicitement le cas binaire : ``label_binarize`` réduit deux
+    classes à une seule colonne (la classe positive = ``labels[1]``),
+    contrairement à la forme une-colonne-par-classe qu'il retourne pour 3 classes ou plus.
     """
     y_true_binarized = label_binarize(y_true, classes=labels)
     scores = np.asarray(scores)
@@ -81,11 +81,11 @@ def compute_pr_auc_per_class(y_true, scores: np.ndarray, labels: list[str]) -> d
 
 def compute_brier_score(y_true, proba: np.ndarray, labels: list[str]) -> float:
     """
-    Multiclass Brier score: mean squared distance between the predicted
-    probability vector and the one-hot true label, averaged over samples.
-    Lower is better (0 = perfect). Requires REAL probabilities
-    (``predict_proba``) -- meaningless on raw decision_function scores,
-    which is exactly why this project only computes it after calibration.
+    Score de Brier multiclasse : distance quadratique moyenne entre le vecteur de
+    probabilité prédit et le label réel en one-hot, moyennée sur les échantillons.
+    Plus bas est meilleur (0 = parfait). Nécessite de VRAIES probabilités
+    (``predict_proba``) -- dénué de sens sur des scores decision_function bruts,
+    ce qui explique précisément pourquoi ce projet ne le calcule qu'après calibration.
     """
     y_true_series = pd.Series(y_true).reset_index(drop=True)
     one_hot = pd.get_dummies(y_true_series).reindex(columns=labels, fill_value=0).to_numpy(dtype=float)
@@ -95,11 +95,11 @@ def compute_brier_score(y_true, proba: np.ndarray, labels: list[str]) -> float:
 
 def compute_ece(y_true, proba: np.ndarray, labels: list[str], n_bins: int = 10) -> float:
     """
-    Expected Calibration Error (top-label, equal-width bins): bins
-    predictions by their top-class confidence, and averages
-    |accuracy - confidence| within each bin, weighted by bin size. Lower
-    is better (0 = perfectly calibrated). Also requires real
-    probabilities, same caveat as ``compute_brier_score``.
+    Expected Calibration Error (top-label, bins de largeur égale) : regroupe les
+    prédictions par la confiance de leur classe la plus probable, et moyenne
+    |accuracy - confiance| au sein de chaque bin, pondéré par la taille du bin. Plus bas
+    est meilleur (0 = parfaitement calibré). Nécessite également de vraies
+    probabilités, même mise en garde que ``compute_brier_score``.
     """
     y_true = np.asarray(y_true)
     proba = np.asarray(proba)
@@ -134,15 +134,15 @@ def paired_bootstrap_test(
     random_state: int = 42,
 ) -> dict:
     """
-    Paired bootstrap significance test on the SAME held-out rows for two
-    models (A, B). Resamples row indices with replacement ``n_bootstrap``
-    times, recomputes ``metric_fn`` for both models on each resample, and
-    reports a 95% CI + two-sided p-value on the observed difference
-    (A - B) -- i.e. whether an observed metric gap is likely real or just
-    noise from the particular test split.
+    Test de significativité par bootstrap apparié sur les MÊMES lignes mises de côté pour deux
+    modèles (A, B). Rééchantillonne les indices de lignes avec remise ``n_bootstrap``
+    fois, recalcule ``metric_fn`` pour les deux modèles sur chaque rééchantillon, et
+    rapporte un IC à 95 % + une p-value bilatérale sur la différence observée
+    (A - B) -- c.-à-d. si un écart de métrique observé est probablement réel ou juste
+    du bruit provenant du split de test particulier.
 
-    ``y_true``, ``y_pred_a``, ``y_pred_b`` must already be aligned on the
-    same rows (e.g. champion vs. runner-up, both evaluated on the same
+    ``y_true``, ``y_pred_a``, ``y_pred_b`` doivent déjà être alignés sur les
+    mêmes lignes (par ex. champion vs. dauphin, tous deux évalués sur le même
     X_test).
     """
     y_true = np.asarray(y_true)
@@ -162,8 +162,8 @@ def paired_bootstrap_test(
 
     ci_lower, ci_upper = (float(v) for v in np.percentile(diffs, [2.5, 97.5]))
 
-    # Two-sided bootstrap p-value: twice the share of resamples that land
-    # on (or past) the opposite side of zero from the observed difference.
+    # Test de significativité bootstrap bilatéral : deux fois la proportion de rééchantillons qui tombent
+    # sur (ou au-delà) le côté opposé de zéro par rapport à la différence observée.
     if observed_diff >= 0:
         p_value = float(np.mean(diffs <= 0)) * 2
     else:

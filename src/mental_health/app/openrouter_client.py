@@ -1,5 +1,5 @@
 """
-OpenRouter LLM client with timeout and exponential-backoff retry.
+Client LLM OpenRouter avec timeout et retry en backoff exponentiel.
 """
 from __future__ import annotations
 
@@ -12,19 +12,19 @@ from openai import APIConnectionError, APIStatusError, OpenAI, RateLimitError
 load_dotenv()
 
 # ============================================================
-# Constants
+# Constantes
 # ============================================================
 
 _DEFAULT_MODEL = "openai/gpt-4o-mini"
 _MAX_TOKENS = 1_500
 _TEMPERATURE = 0.2
-_TIMEOUT = 30.0          # seconds per request
+_TIMEOUT = 30.0          # secondes par requête
 _MAX_RETRIES = 3
-_BACKOFF_BASE = 2.0      # seconds; doubles on each retry
+_BACKOFF_BASE = 2.0      # secondes ; double à chaque nouvelle tentative
 
 
 # ============================================================
-# Client factory
+# Fabrique de client
 # ============================================================
 
 def get_openrouter_client() -> OpenAI:
@@ -49,7 +49,7 @@ def get_default_model() -> str:
 
 
 # ============================================================
-# Public API
+# API publique
 # ============================================================
 
 def ask_llm(
@@ -58,10 +58,11 @@ def ask_llm(
     max_tokens: int = _MAX_TOKENS,
 ) -> str:
     """
-    Send a prompt to the configured LLM via OpenRouter.
+    Envoie un prompt au LLM configuré via OpenRouter.
 
-    Retries up to _MAX_RETRIES times with exponential backoff on
-    connection errors and rate limits. Raises on persistent failure.
+    Retente jusqu'à _MAX_RETRIES fois avec un backoff exponentiel en cas
+    d'erreurs de connexion et de rate limits. Lève une exception en cas
+    d'échec persistant.
     """
     client = get_openrouter_client()
     model_name = get_default_model()
@@ -94,7 +95,7 @@ def ask_llm(
             time.sleep(wait)
 
         except APIStatusError as exc:
-            # 4xx errors (except 429) are not retryable
+            # Les erreurs 4xx (sauf 429) ne sont pas réessayables
             raise exc
 
     raise RuntimeError(

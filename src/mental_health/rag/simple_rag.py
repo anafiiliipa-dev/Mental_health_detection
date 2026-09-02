@@ -1,13 +1,13 @@
 """
-RAG (Retrieval-Augmented Generation) pipeline.
+Pipeline RAG (Retrieval-Augmented Generation).
 
-Architecture:
-    1. Load .txt / .md documents from rag_source/
-    2. Chunk and embed them with a local sentence-transformers model
-    3. Persist the FAISS index to disk (faiss_index/) — rebuilt only
-       when the source files change or the index is missing
-    4. On query: retrieve top-k chunks, build a grounded prompt,
-       call the LLM via OpenRouter, return the generated answer
+Architecture :
+    1. Charge les documents .txt / .md depuis rag_source/
+    2. Les découpe en chunks et les embed avec un modèle sentence-transformers local
+    3. Persiste l'index FAISS sur disque (faiss_index/) — reconstruit
+       uniquement quand les fichiers source changent ou que l'index est absent
+    4. À la requête : récupère les top-k chunks, construit un prompt ancré
+       (grounded), appelle le LLM via OpenRouter, retourne la réponse générée
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from mental_health.config.paths import RAG_INDEX_DIR, RAG_SOURCE_DIR
 
 # ============================================================
-# Constants
+# Constantes
 # ============================================================
 
 _EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
@@ -35,11 +35,11 @@ _INDEX_MANIFEST = RAG_INDEX_DIR / "manifest.json"
 
 
 # ============================================================
-# Document loading
+# Chargement des documents
 # ============================================================
 
 def load_documents() -> list[Any]:
-    """Load all .txt and .md files from the RAG source directory."""
+    """Charge tous les fichiers .txt et .md depuis le répertoire source RAG."""
     docs: list[Any] = []
     if not RAG_SOURCE_DIR.exists():
         return docs
@@ -51,7 +51,7 @@ def load_documents() -> list[Any]:
 
 
 def _source_fingerprint() -> str:
-    """Return a hash of all source file contents to detect changes."""
+    """Retourne un hash du contenu de tous les fichiers source pour détecter les changements."""
     h = hashlib.md5()
     if not RAG_SOURCE_DIR.exists():
         return ""
@@ -73,7 +73,7 @@ def _save_manifest(fingerprint: str) -> None:
 
 
 # ============================================================
-# Vector store
+# Base vectorielle
 # ============================================================
 
 def _get_embeddings() -> HuggingFaceEmbeddings:
@@ -92,8 +92,8 @@ def _build_vectorstore(docs: list[Any]) -> FAISS:
 
 def _load_or_build_vectorstore() -> FAISS | None:
     """
-    Return a FAISS vectorstore, loading from disk when possible.
-    Rebuilds (and persists) when the source files have changed.
+    Retourne une base vectorielle FAISS, en la chargeant depuis le disque quand possible.
+    Reconstruit (et persiste) quand les fichiers source ont changé.
     """
     docs = load_documents()
     if not docs:
@@ -104,7 +104,7 @@ def _load_or_build_vectorstore() -> FAISS | None:
 
     embeddings = _get_embeddings()
 
-    # Try loading from disk if fingerprint matches
+    # Tente de charger depuis le disque si le fingerprint correspond
     if (
         manifest.get("fingerprint") == fingerprint
         and RAG_INDEX_DIR.exists()
@@ -117,9 +117,9 @@ def _load_or_build_vectorstore() -> FAISS | None:
                 allow_dangerous_deserialization=True,
             )
         except Exception:
-            pass  # Fall through to rebuild
+            pass  # Se rabat sur la reconstruction
 
-    # Build from scratch and persist
+    # Construit à partir de zéro et persiste
     vectorstore = _build_vectorstore(docs)
     RAG_INDEX_DIR.mkdir(parents=True, exist_ok=True)
     vectorstore.save_local(str(RAG_INDEX_DIR))
@@ -128,16 +128,16 @@ def _load_or_build_vectorstore() -> FAISS | None:
 
 
 # ============================================================
-# RAG chain
+# Chaîne RAG
 # ============================================================
 
 @dataclass
 class SimpleLocalRAG:
     """
-    Retrieve-then-generate RAG chain.
+    Chaîne RAG retrieve-then-generate.
 
-    Retrieves relevant chunks from the local FAISS index,
-    builds a grounded prompt, and calls the LLM via OpenRouter.
+    Récupère les chunks pertinents depuis l'index FAISS local,
+    construit un prompt ancré (grounded), et appelle le LLM via OpenRouter.
     """
     vectorstore: Any
     _system_prompt: str = field(default=(
@@ -150,7 +150,7 @@ class SimpleLocalRAG:
 
     def invoke(self, inputs: dict[str, str]) -> dict[str, Any]:
         from mental_health.app.openrouter_client import (
-            ask_llm,  # local import to avoid circular deps
+            ask_llm,  # import local pour éviter les dépendances circulaires
         )
 
         query = inputs.get("query", "").strip()
@@ -184,7 +184,7 @@ class SimpleLocalRAG:
 
 
 def build_qa_chain() -> SimpleLocalRAG | None:
-    """Build and return a SimpleLocalRAG, or None if no documents exist."""
+    """Construit et retourne un SimpleLocalRAG, ou None si aucun document n'existe."""
     vectorstore = _load_or_build_vectorstore()
     if vectorstore is None:
         return None

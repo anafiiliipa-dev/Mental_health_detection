@@ -1,27 +1,29 @@
 """
-Weekly drift-monitoring job (Phase 10 completion).
+Job hebdomadaire de monitoring du drift (fin de la Phase 10).
 
-Scores a sampled batch of "new" messages (see ``mock_stream.py``) with the
-current "production" model, compares the distribution of predicted labels
-and text length against the training reference set using Evidently, and:
+Score un lot échantillonné de "nouveaux" messages (voir ``mock_stream.py``) avec le
+modèle "production" actuel, compare la distribution des labels prédits
+et de la longueur du texte par rapport au jeu de référence d'entraînement en
+utilisant Evidently, et :
 
-- writes an HTML drift report (uploaded as a GitHub Actions run artifact
-  by the calling workflow),
-- logs a summary run (drift metrics + the report itself) to the shared
-  MLflow backend, under the ``mental_health_monitoring`` experiment.
+- écrit un rapport de drift HTML (téléversé en tant qu'artefact de run
+  GitHub Actions par le workflow appelant),
+- consigne un run récapitulatif (métriques de drift + le rapport lui-même)
+  dans le backend MLflow partagé, sous l'expérience ``mental_health_monitoring``.
 
-Deliberately does NOT trigger retraining — that decision is explicitly
-deferred to Phase 12 (automated retraining trigger). This script only
-observes and reports.
+Ne déclenche volontairement PAS de réentraînement — cette décision est
+explicitement différée à la Phase 12 (déclenchement automatique du
+réentraînement). Ce script se contente d'observer et de rapporter.
 
-Flavor-aware (added when the API's model_loader/main.py became
-flavor-aware — see ``mental_health.api.main._predict_with_real_model``):
-the "production" model can now be a scikit-learn pipeline OR a
-Transformers text-classification pipeline (e.g. a promoted DistilBERT
-candidate), and this job scores whichever one is actually in production
-instead of assuming ``.predict``/``.predict_proba`` — see
-``_predict_batch`` below, which mirrors the same dispatch logic the API
-uses per-request, batched here for scoring a whole dataframe at once.
+Sensible au flavor (ajouté quand model_loader/main.py de l'API est devenu
+sensible au flavor — voir ``mental_health.api.main._predict_with_real_model``) :
+le modèle "production" peut désormais être un pipeline scikit-learn OU un
+pipeline Transformers de classification de texte (par ex. un candidat
+DistilBERT promu), et ce job score celui qui est réellement en production
+au lieu de supposer ``.predict``/``.predict_proba`` — voir
+``_predict_batch`` ci-dessous, qui reproduit la même logique de dispatch
+que l'API utilise par requête, ici traitée par lot pour scorer un dataframe
+entier d'un coup.
 
 Usage:
     python -m mental_health.monitoring.drift_check
@@ -38,10 +40,10 @@ import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 
-# Must run before the mlflow_config import below reads MLFLOW_TRACKING_URI /
-# MLFLOW_ARTIFACT_ROOT from the environment — same convention as
-# train.py / promote.py / main.py. A no-op in CI, where these are set
-# directly as GitHub Actions secrets/env vars.
+# Doit s'exécuter avant que l'import mlflow_config ci-dessous ne lise MLFLOW_TRACKING_URI /
+# MLFLOW_ARTIFACT_ROOT depuis l'environnement — même convention que
+# train.py / promote.py / main.py. Un no-op en CI, où ces variables sont définies
+# directement comme secrets/variables d'environnement GitHub Actions.
 load_dotenv()
 
 from evidently.metric_preset import DataDriftPreset  # noqa: E402
@@ -74,23 +76,23 @@ def _get_or_create_experiment(name: str, artifact_location: str) -> str:
 
 def _predict_batch(loaded: LoadedModel, texts: pd.Series) -> tuple[list[str], list[float] | None]:
     """
-    Score a batch of texts with the production model, dispatching on
-    flavor exactly like ``mental_health.api.main._predict_with_real_model``
-    does per-request. Returns ``(predicted_labels, confidences)`` --
-    ``confidences`` is ``None`` only for an sklearn model with neither
-    ``predict_proba`` nor ``decision_function`` (defensive only: since
-    Phase 11 the served classical champion is always calibrated via
-    CalibratedClassifierCV, so this should always be available for that
-    flavor in practice).
+    Score un lot de textes avec le modèle de production, en dispatchant selon
+    le flavor exactement comme le fait ``mental_health.api.main._predict_with_real_model``
+    par requête. Retourne ``(predicted_labels, confidences)`` --
+    ``confidences`` n'est ``None`` que pour un modèle sklearn n'ayant ni
+    ``predict_proba`` ni ``decision_function`` (défensif uniquement : depuis
+    la Phase 11 le champion classique servi est toujours calibré via
+    CalibratedClassifierCV, donc cela devrait toujours être disponible pour ce
+    flavor en pratique).
     """
     texts = list(texts)
 
     if loaded.flavor == "transformers":
-        # top_k=None and truncation=True explicitly, every call -- see
-        # main.py's _predict_with_transformers_model docstring for why
-        # neither can be relied upon as the pipeline's own default post
-        # round-trip (and why an untruncated long text crashes PyTorch's
-        # position embeddings instead of failing gracefully).
+        # top_k=None et truncation=True explicitement, à chaque appel -- voir
+        # la docstring de _predict_with_transformers_model dans main.py pour savoir
+        # pourquoi on ne peut se fier à aucun des deux comme valeur par défaut propre
+        # au pipeline après un aller-retour (et pourquoi un texte long non tronqué
+        # fait planter les position embeddings de PyTorch au lieu d'échouer proprement).
         results = loaded.model(texts, top_k=None, truncation=True)
         labels: list[str] = []
         confidences: list[float] = []
@@ -122,10 +124,11 @@ def build_drift_frames(
     loaded: LoadedModel, reference_df: pd.DataFrame, current_df: pd.DataFrame
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Build the columns Evidently compares between the reference set and the
-    current sampled batch: ``text_length`` and ``prediction`` (categorical/
-    target drift) always, plus ``prediction_confidence`` (numerical drift)
-    whenever the production model exposes a confidence score for its flavor.
+    Construit les colonnes qu'Evidently compare entre le jeu de référence et le
+    lot échantillonné actuel : ``text_length`` et ``prediction`` (drift
+    catégoriel/cible) toujours, plus ``prediction_confidence`` (drift
+    numérique) chaque fois que le modèle de production expose un score de
+    confiance pour son flavor.
     """
     reference_labels, reference_confidence = _predict_batch(loaded, reference_df[TEXT_COL])
     current_labels, current_confidence = _predict_batch(loaded, current_df[TEXT_COL])
@@ -198,9 +201,9 @@ def run_drift_check(
 
 def _write_github_output(result: dict) -> None:
     """
-    When running inside a GitHub Actions step, expose the drift outcome as
-    step outputs (``dataset_drift``, ``n_drifted_columns``) so the calling
-    workflow can decide whether to open an alert issue. A no-op outside CI.
+    Lorsqu'exécuté dans une étape GitHub Actions, expose le résultat du drift en
+    tant que sorties d'étape (``dataset_drift``, ``n_drifted_columns``) afin que le
+    workflow appelant puisse décider d'ouvrir ou non une issue d'alerte. Un no-op hors CI.
     """
     github_output = os.environ.get("GITHUB_OUTPUT")
     if not github_output:

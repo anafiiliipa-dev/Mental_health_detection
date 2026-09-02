@@ -1,27 +1,28 @@
 """
-Bias slicing: evaluation by subgroup (Phase 11, remaining slice:
+Bias slicing : évaluation par sous-groupe (Phase 11, slice restante :
 "évaluation par sous-groupes (bias slicing)").
 
-This dataset (``cleaning.py``: ``body`` + ``category``, scraped from public
-mental-health forums) carries no demographic attributes (age, gender,
-locale, ...) to slice on — there is nothing to fabricate here, and
-inventing a proxy for a protected attribute the data doesn't actually
-contain would be worse than not slicing at all. Slicing is instead done on
-attributes the data genuinely has and that are known failure modes for
-text classifiers:
+Ce dataset (``cleaning.py`` : ``body`` + ``category``, scrapé depuis des
+forums publics de santé mentale) ne porte aucun attribut démographique
+(âge, genre, locale, ...) sur lequel slicer — il n'y a rien à fabriquer ici,
+et inventer un proxy pour un attribut protégé que les données ne contiennent
+pas réellement serait pire que de ne pas slicer du tout. Le slicing se fait
+plutôt sur des attributs que les données possèdent réellement et qui sont
+des modes d'échec connus pour les classifieurs de texte :
 
-- **per-class (label) performance**: is the model quietly failing on one
-  or more of the seven diagnosis categories while headline macro metrics
-  look fine? Clinically the most important slice, since the two critical
-  labels (Bipolar, Schizophrenia) are also among the rarer ones.
-- **text length**: short posts carry less signal than long ones — a model
-  that only works on verbose posts is a real, previously undocumented
-  failure mode for a triage tool meant to work on whatever a user actually
-  types.
+- **performance par classe (label)** : le modèle échoue-t-il discrètement
+  sur une ou plusieurs des sept catégories de diagnostic pendant que les
+  métriques macro globales semblent correctes ? C'est la slice la plus
+  importante cliniquement, puisque les deux labels critiques (Bipolar,
+  Schizophrenia) sont aussi parmi les plus rares.
+- **longueur du texte** : les posts courts portent moins de signal que les
+  longs — un modèle qui ne fonctionne que sur des posts verbeux est un
+  véritable mode d'échec, auparavant non documenté, pour un outil de
+  triage censé fonctionner sur ce qu'un utilisateur tape réellement.
 
-Like ``robustness.py`` and the rest of Phase 11's evaluation additions,
-this is reporting/diagnostic only — it does not feed back into champion
-selection or the promotion gate.
+Comme ``robustness.py`` et le reste des ajouts d'évaluation de la Phase 11,
+ceci est purement du reporting/diagnostic — cela n'alimente pas la sélection
+du champion ni le gate de promotion.
 """
 from __future__ import annotations
 
@@ -31,7 +32,7 @@ from sklearn.metrics import f1_score, recall_score
 from mental_health.config.paths import CRITICAL_LABELS
 
 # ============================================================
-# Slice assignment
+# Attribution des slices
 # ============================================================
 
 DEFAULT_LENGTH_BIN_LABELS = ["short", "medium", "long"]
@@ -39,11 +40,12 @@ DEFAULT_LENGTH_BIN_LABELS = ["short", "medium", "long"]
 
 def assign_length_slices(texts: pd.Series, n_bins: int = 3, labels: list[str] | None = None) -> pd.Series:
     """
-    Bucket each text into an equal-frequency (quantile) length slice by
-    word count — e.g. terciles ``["short", "medium", "long"]`` by default.
-    Quantile (not equal-width) binning is used so each slice has a
-    comparable sample size, which is what makes a per-slice recall
-    comparison meaningful rather than noisy on a near-empty bin.
+    Range chaque texte dans une slice de longueur à fréquence égale
+    (quantile) selon le nombre de mots — par exemple des terciles
+    ``["short", "medium", "long"]`` par défaut. Le binning par quantile
+    (et non à largeur égale) est utilisé pour que chaque slice ait une
+    taille d'échantillon comparable, ce qui rend une comparaison de recall
+    par slice pertinente plutôt que bruitée sur un bin quasi vide.
     """
     labels = labels if labels is not None else DEFAULT_LENGTH_BIN_LABELS[:n_bins]
     if len(labels) != n_bins:
@@ -53,29 +55,31 @@ def assign_length_slices(texts: pd.Series, n_bins: int = 3, labels: list[str] | 
     try:
         return pd.qcut(word_counts, q=n_bins, labels=labels, duplicates="drop")
     except ValueError:
-        # Degenerate input (e.g. every text the same length, or too few
-        # rows) — qcut can't form n_bins distinct edges. Fall back to a
-        # single slice rather than raising, since this is a diagnostic
-        # tool, not a training-time step that must be strict.
+        # Entrée dégénérée (par ex. tous les textes de même longueur, ou trop
+        # peu de lignes) — qcut ne peut pas former n_bins bornes distinctes.
+        # On retombe sur une slice unique plutôt que de lever une exception,
+        # puisque c'est un outil de diagnostic, pas une étape d'entraînement
+        # qui doit être stricte.
         return pd.Series([labels[0]] * len(word_counts))
 
 
 # ============================================================
-# Per-slice evaluation
+# Évaluation par slice
 # ============================================================
 
 
 def _slice_metrics(y_true, y_pred) -> dict:
-    # IMPORTANT: labels is pinned to the classes actually present in this
-    # slice's y_true, not left to sklearn's default (the union of y_true
-    # and y_pred). Left at the default, a class slice -- where y_true is a
-    # SINGLE label by construction -- would macro-average over every other
-    # label the model happened to (wrongly) predict in that slice too,
-    # each scored 0 recall by zero_division since it has no true instances
-    # here. That silently drags every slice's score down to near-noise
-    # regardless of how the model actually does on its true label -- not a
-    # subgroup performance measurement at all, just an artifact of how
-    # wrong the model's off-label guesses were.
+    # IMPORTANT : labels est fixé aux classes réellement présentes dans le
+    # y_true de cette slice, et non laissé au défaut de sklearn (l'union de
+    # y_true et y_pred). Laissé au défaut, une slice de classe -- où y_true
+    # est un SEUL label par construction -- ferait une macro-moyenne sur
+    # tous les autres labels que le modèle a (à tort) prédits dans cette
+    # slice aussi, chacun noté 0 en recall par zero_division puisqu'il n'a
+    # aucune instance vraie ici. Cela tire silencieusement le score de
+    # chaque slice vers un quasi-bruit, indépendamment de la performance
+    # réelle du modèle sur son vrai label -- ce n'est plus du tout une
+    # mesure de performance de sous-groupe, juste un artefact de à quel
+    # point les suppositions hors-label du modèle étaient fausses.
     labels = sorted(pd.Series(y_true).unique())
     return {
         "support": len(y_true),
@@ -86,11 +90,12 @@ def _slice_metrics(y_true, y_pred) -> dict:
 
 def evaluate_slices(y_true, y_pred, slice_labels, slice_column_name: str = "slice") -> pd.DataFrame:
     """
-    Generic per-slice evaluation: groups ``(y_true, y_pred)`` by
-    ``slice_labels`` (any grouping key of the same length — a class label,
-    a length bucket, a text variant, ...) and reports per-slice support,
-    f1_macro and recall_macro, sorted worst-f1_macro-first so the weakest
-    subgroup is immediately visible.
+    Évaluation générique par slice : regroupe ``(y_true, y_pred)`` par
+    ``slice_labels`` (n'importe quelle clé de regroupement de même longueur
+    — un label de classe, un bucket de longueur, une variante de texte, ...)
+    et rapporte le support, le f1_macro et le recall_macro par slice, triés
+    du pire f1_macro au meilleur pour que le sous-groupe le plus faible soit
+    immédiatement visible.
     """
     df = pd.DataFrame({
         slice_column_name: pd.Series(slice_labels).reset_index(drop=True),
@@ -107,11 +112,11 @@ def evaluate_slices(y_true, y_pred, slice_labels, slice_column_name: str = "slic
 
 def evaluate_class_slices(y_true, y_pred) -> pd.DataFrame:
     """
-    Per-label (diagnosis category) recall — the most direct bias-slicing
-    view for this project: is any single class, critical or not, being
-    under-served relative to the others? Flags the clinically critical
-    labels (``CRITICAL_LABELS``) explicitly so a reviewer doesn't have to
-    cross-reference a separate list.
+    Recall par label (catégorie de diagnostic) — la vue de bias-slicing la
+    plus directe pour ce projet : une classe donnée, critique ou non, est-elle
+    sous-servie par rapport aux autres ? Signale explicitement les labels
+    cliniquement critiques (``CRITICAL_LABELS``) pour qu'un relecteur n'ait
+    pas à croiser avec une liste séparée.
     """
     report = evaluate_slices(y_true, y_pred, y_true, slice_column_name="label")
     report = report.rename(columns={"f1_macro": "f1", "recall_macro": "recall"})
@@ -120,18 +125,18 @@ def evaluate_class_slices(y_true, y_pred) -> pd.DataFrame:
 
 
 def evaluate_length_slices(texts, y_true, y_pred, n_bins: int = 3) -> pd.DataFrame:
-    """Per length-bucket (short/medium/long, by word count) macro metrics."""
+    """Métriques macro par bucket de longueur (short/medium/long, selon le nombre de mots)."""
     length_slices = assign_length_slices(texts, n_bins=n_bins)
     return evaluate_slices(y_true, y_pred, length_slices, slice_column_name="length_bucket")
 
 
 def summarize_fairness_gap(slice_report: pd.DataFrame, metric_col: str = "recall") -> dict:
     """
-    The headline fairness number for a slice report: the gap between the
-    best- and worst-performing slice on ``metric_col``, plus which slice
-    is worst — this is the number that should get attention even when the
-    overall macro metric looks fine, since a large gap can hide behind a
-    healthy average.
+    Le chiffre de fairness principal pour un rapport de slice : l'écart entre
+    la slice la plus performante et la moins performante sur ``metric_col``,
+    plus quelle slice est la pire — c'est le chiffre qui devrait attirer
+    l'attention même quand la métrique macro globale semble correcte,
+    puisqu'un grand écart peut se cacher derrière une moyenne saine.
     """
     if slice_report.empty or metric_col not in slice_report.columns:
         return {"gap": 0.0, "worst_slice": None, "best_slice": None}
@@ -151,11 +156,11 @@ def summarize_fairness_gap(slice_report: pd.DataFrame, metric_col: str = "recall
 
 def run() -> dict[str, pd.DataFrame]:
     """
-    Load the current champion (registered "production" alias, falling
-    back to "staging"), rebuild its test split, and write both the
-    per-class and per-length-bucket slice reports to
-    ``paths.BIAS_SLICING_REPORT_PATH`` (concatenated, with a ``slice_type``
-    column distinguishing the two).
+    Charge le champion actuel (alias "production" enregistré, avec repli sur
+    "staging"), reconstruit son split de test, et écrit les rapports de
+    slice par classe et par bucket de longueur dans
+    ``paths.BIAS_SLICING_REPORT_PATH`` (concaténés, avec une colonne
+    ``slice_type`` distinguant les deux).
     """
     import logging
 

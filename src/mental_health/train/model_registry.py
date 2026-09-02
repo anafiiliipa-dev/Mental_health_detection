@@ -1,18 +1,18 @@
 """
-Candidate model definitions and class-weight computation for the classical
-ML benchmark.
+Définitions des modèles candidats et calcul des poids de classe pour le
+benchmark de ML classique.
 
-Extracted and corrected from ``notebooks/02_classical_ml.ipynb`` (cells
-"PHASE 3 — COMPUTE CUSTOM CLASS WEIGHTS" and "PHASE 4 — MODEL REGISTRY").
+Extrait et corrigé de ``notebooks/02_classical_ml.ipynb`` (cellules
+"PHASE 3 — COMPUTE CUSTOM CLASS WEIGHTS" et "PHASE 4 — MODEL REGISTRY").
 
-Correction relative to the original notebook: the manual class-weight boost
-checked for the label ``"schizophrenia"`` (lowercase) in the weights
-dictionary. Since ``src/mental_health/data/cleaning.py`` now normalises this
-label to ``"Schizophrenia"`` (see the audit for the original bug), that
-lowercase check would silently no-op — the boost would never apply. This
-module keys the boost off ``mental_health.config.paths.CRITICAL_LABELS``
-instead of a hardcoded string, so there is a single source of truth for the
-label spelling.
+Correction par rapport au notebook original : le boost manuel des poids de classe
+vérifiait le label ``"schizophrenia"`` (en minuscules) dans le dictionnaire
+de poids. Comme ``src/mental_health/data/cleaning.py`` normalise désormais ce
+label en ``"Schizophrenia"`` (voir l'audit pour le bug d'origine), cette
+vérification en minuscules serait silencieusement un no-op -- le boost ne s'appliquerait jamais. Ce
+module fait dépendre le boost de ``mental_health.config.paths.CRITICAL_LABELS``
+plutôt que d'une chaîne codée en dur, afin qu'il y ait une seule source de vérité pour
+l'orthographe du label.
 """
 from __future__ import annotations
 
@@ -32,8 +32,8 @@ from mental_health.train.xgb_wrapper import XGBTextClassifier
 
 RANDOM_STATE = 42
 
-# TF-IDF configuration shared by every candidate pipeline (unchanged from
-# the original notebook).
+# Configuration TF-IDF partagée par chaque pipeline candidat (inchangée par rapport à
+# le notebook original).
 TFIDF_KWARGS = {
     "ngram_range": (1, 2),
     "min_df": 2,
@@ -43,19 +43,19 @@ TFIDF_KWARGS = {
     "strip_accents": "unicode",
 }
 
-# Manual boost applied on top of the "balanced" class weights for the two
-# clinically critical labels — same rationale and factors as the original
-# notebook (schizophrenia is the rarest and clinically highest-priority
-# class; bipolar is the second critical label).
+# Boost manuel appliqué en plus des poids de classe "balanced" pour les deux
+# labels cliniquement critiques -- même logique et mêmes facteurs que le
+# notebook original (schizophrenia est la classe la plus rare et cliniquement la plus
+# prioritaire ; bipolar est le second label critique).
 CLASS_WEIGHT_BOOST: dict[str, float] = {
     "Schizophrenia": 1.3,
     "Bipolar": 1.2,
 }
 
-# Sanity check at import time: the boost must only ever target labels that
-# are actually flagged as clinically critical in paths.py. This turns a
-# silent future mismatch (e.g. someone renames a label) into an import-time
-# error instead of a no-op boost.
+# Vérification de cohérence au moment de l'import : le boost ne doit jamais cibler que des labels
+# effectivement marqués comme cliniquement critiques dans paths.py. Cela transforme une
+# incohérence future silencieuse (par ex. quelqu'un renomme un label) en une
+# erreur au moment de l'import plutôt qu'un boost sans effet.
 _unknown_boost_labels = set(CLASS_WEIGHT_BOOST) - set(CRITICAL_LABELS)
 if _unknown_boost_labels:
     raise ValueError(
@@ -65,8 +65,8 @@ if _unknown_boost_labels:
 
 def compute_boosted_class_weights(y_train: pd.Series) -> dict[str, float]:
     """
-    Compute sklearn "balanced" class weights on ``y_train``, then apply the
-    manual boost from ``CLASS_WEIGHT_BOOST`` on top.
+    Calcule les poids de classe "balanced" de sklearn sur ``y_train``, puis applique le
+    boost manuel de ``CLASS_WEIGHT_BOOST`` en plus.
     """
     classes = np.unique(y_train)
     weights = compute_class_weight(class_weight="balanced", classes=classes, y=y_train)
@@ -83,20 +83,20 @@ def build_model_registry(
     class_weight_dict: dict[str, float], embedding_cache: dict[str, object] | None = None
 ) -> dict[str, dict]:
     """
-    Build the candidate model registry: TF-IDF + classifier pipelines,
-    each with a small hyperparameter grid (the original 5 from the
-    notebook's ``MODEL_REGISTRY``, plus XGBoost/LightGBM added in
+    Construit le registre des modèles candidats : pipelines TF-IDF + classifieur,
+    chacun avec une petite grille d'hyperparamètres (les 5 d'origine du
+    ``MODEL_REGISTRY`` du notebook, plus XGBoost/LightGBM ajoutés en
     Phase 11).
 
-    ``embedding_cache``, when provided, additionally adds two
-    sentence-embedding candidates (``Embedding_LogReg``,
-    ``Embedding_SVM`` -- Phase 11's "solution intermediaire" between
-    TF-IDF and a full transformer fine-tune). Left out when
-    ``embedding_cache`` is ``None`` (the default) so every existing
-    caller keeps working unchanged, and so importing/using this function
-    never requires the ``embedding_models`` extra (``sentence-transformers``)
-    to be installed unless an embedding-based benchmark is actually
-    requested.
+    ``embedding_cache``, lorsqu'il est fourni, ajoute en plus deux
+    candidats basés sur des sentence-embeddings (``Embedding_LogReg``,
+    ``Embedding_SVM`` -- la "solution intermédiaire" de la Phase 11 entre
+    le TF-IDF et un fine-tuning complet de transformer). Omis lorsque
+    ``embedding_cache`` vaut ``None`` (valeur par défaut) afin que tout
+    appelant existant continue de fonctionner sans changement, et pour que
+    l'import/l'utilisation de cette fonction ne nécessite jamais l'extra
+    ``embedding_models`` (``sentence-transformers``) sauf si un benchmark basé
+    sur des embeddings est réellement demandé.
     """
     registry = {
         "LinearSVC_balanced": {
@@ -139,11 +139,11 @@ def build_model_registry(
             ]),
             "param_grid": {"clf__alpha": [0.5, 1.0]},
         },
-        # Phase 11: XGBoost/LightGBM published on the same TF-IDF features
-        # as the linear registry above, on request from the audit
-        # (mentioned in architecture.md but never actually benchmarked).
-        # class_weight_dict is the same boosted-balanced weighting the
-        # "_balanced" linear candidates already use.
+        # Phase 11 : XGBoost/LightGBM publiés sur les mêmes features TF-IDF
+        # que le registre linéaire ci-dessus, à la demande de l'audit
+        # (mentionné dans architecture.md mais jamais réellement benchmarké).
+        # class_weight_dict est la même pondération balanced-boostée que celle
+        # déjà utilisée par les candidats linéaires "_balanced".
         "XGBoost_balanced": {
             "pipeline": Pipeline([
                 ("tfidf", TfidfVectorizer(**TFIDF_KWARGS)),

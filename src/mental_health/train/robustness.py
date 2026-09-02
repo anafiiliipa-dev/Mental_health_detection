@@ -1,21 +1,21 @@
 """
-Robustness tests under text perturbation (Phase 11, remaining slice:
-"tests de robustesse (fautes de frappe/casse)").
+Tests de robustesse sous perturbation textuelle (Phase 11, tranche
+restante : "tests de robustesse (fautes de frappe/casse)").
 
-Evaluates an already-trained model (typically the registered champion) on
-deliberately corrupted copies of the held-out test set — typos and casing
-changes a real user is likely to actually type — and reports how much each
-headline metric degrades relative to the clean baseline. This is
-reporting/diagnostic only, exactly like ``evaluation_metrics.py``'s MCC/
-PR-AUC and the paired bootstrap test: it does NOT feed back into champion
-selection (``benchmark.py``/``champion.py``) or the promotion gate
-(``promote.py``), which are both unchanged.
+Évalue un modèle déjà entraîné (typiquement le champion enregistré) sur
+des copies délibérément corrompues de l'ensemble de test mis de côté — fautes de frappe et
+changements de casse qu'un vrai utilisateur est susceptible de réellement taper — et rapporte de combien
+chaque métrique principale se dégrade par rapport à la baseline propre. Ceci est
+uniquement du reporting/diagnostic, exactement comme le MCC/PR-AUC et le test bootstrap
+apparié d'``evaluation_metrics.py`` : cela n'influence PAS en retour la sélection
+du champion (``benchmark.py``/``champion.py``) ni la porte de promotion
+(``promote.py``), qui restent toutes deux inchangées.
 
-Perturbations are applied to already-cleaned text (``cleaning.py`` has
-already run), simulating noisy INPUT at inference time — not noisy
-training data — since ``build_model_registry``'s TF-IDF/embedding
-pipelines are fit once on clean text and never retrained here; only
-``X_test`` is corrupted before calling ``model.predict``.
+Les perturbations sont appliquées à du texte déjà nettoyé (``cleaning.py`` a
+déjà tourné), simulant une entrée bruitée au moment de l'inférence — pas des
+données d'entraînement bruitées — puisque les pipelines TF-IDF/embedding de
+``build_model_registry`` sont ajustés une seule fois sur du texte propre et jamais
+réentraînés ici ; seul ``X_test`` est corrompu avant d'appeler ``model.predict``.
 """
 from __future__ import annotations
 
@@ -35,11 +35,11 @@ from mental_health.train.benchmark import critical_recall_score
 
 def inject_typos(text: str, rate: float = 0.1, seed: int | None = None) -> str:
     """
-    Corrupt ``text`` character-by-character: each character independently
-    has probability ``rate`` of being altered by one of four common typing
-    mistakes (substitute with a random lowercase letter, delete, duplicate,
-    or transpose with the next character). Deterministic for a given
-    ``seed`` so the report is reproducible.
+    Corrompt ``text`` caractère par caractère : chaque caractère a
+    indépendamment une probabilité ``rate`` d'être altéré par l'une des quatre
+    erreurs de frappe courantes (substitution par une lettre minuscule aléatoire, suppression,
+    duplication, ou transposition avec le caractère suivant). Déterministe pour une
+    ``seed`` donnée afin que le rapport soit reproductible.
     """
     if not text:
         return text
@@ -55,14 +55,14 @@ def inject_typos(text: str, rate: float = 0.1, seed: int | None = None) -> str:
             if mistake == "substitute":
                 out.append(rng.choice(string.ascii_lowercase))
             elif mistake == "delete":
-                pass  # drop the character entirely
+                pass  # supprime le caractère entièrement
             elif mistake == "duplicate":
                 out.append(char)
                 out.append(char)
             elif mistake == "transpose" and i + 1 < len(chars):
                 out.append(chars[i + 1])
                 out.append(char)
-                i += 1  # already consumed the next character
+                i += 1  # a déjà consommé le caractère suivant
         else:
             out.append(char)
         i += 1
@@ -72,14 +72,14 @@ def inject_typos(text: str, rate: float = 0.1, seed: int | None = None) -> str:
 
 def randomize_casing(text: str, mode: str = "random", seed: int | None = None) -> str:
     """
-    Change the casing of ``text``. ``mode`` is one of:
+    Change la casse de ``text``. ``mode`` vaut l'un des suivants :
 
-    - ``"upper"``: ALL CAPS (e.g. a user with caps-lock stuck on).
-    - ``"lower"``: all lowercase (the most common real-world case — most
-      people don't bother capitalising casual text).
-    - ``"random"``: each letter independently upper/lowercased — a
-      stress-test extreme, unlikely verbatim but exercises the same
-      case-sensitivity a real model should not depend on.
+    - ``"upper"`` : TOUT EN MAJUSCULES (par ex. un utilisateur avec le verrouillage majuscules bloqué).
+    - ``"lower"`` : tout en minuscules (le cas réel le plus courant — la plupart
+      des gens ne se donnent pas la peine de mettre des majuscules dans un texte informel).
+    - ``"random"`` : chaque lettre indépendamment mise en majuscule/minuscule — un
+      cas extrême de test de stress, peu probable tel quel mais qui exerce la même
+      sensibilité à la casse dont un vrai modèle ne devrait pas dépendre.
     """
     if not text:
         return text
@@ -97,17 +97,17 @@ def randomize_casing(text: str, mode: str = "random", seed: int | None = None) -
 
 def perturb_series(texts: pd.Series, perturb_fn, random_state: int = 42) -> pd.Series:
     """
-    Apply ``perturb_fn(text, seed=...)`` to every row of ``texts``, seeding
-    each row deterministically off its position so re-running the same
-    perturbation on the same data always yields the same corrupted text.
+    Applique ``perturb_fn(text, seed=...)`` à chaque ligne de ``texts``, en initialisant
+    chaque ligne de manière déterministe à partir de sa position afin que relancer la même
+    perturbation sur les mêmes données produise toujours le même texte corrompu.
     """
     texts = pd.Series(texts).reset_index(drop=True)
     return pd.Series([perturb_fn(text, seed=random_state + i) for i, text in enumerate(texts)])
 
 
-# Presets exercised by evaluate_robustness / run() by default. Each maps a
-# human-readable name to a one-argument-short-of-ready perturbation
-# function (still needs ``seed=`` at call time, supplied by perturb_series).
+# Presets exercés par défaut par evaluate_robustness / run(). Chacun associe un
+# nom lisible par un humain à une fonction de perturbation prête à l'emploi
+# à un argument près (a encore besoin de ``seed=`` au moment de l'appel, fourni par perturb_series).
 DEFAULT_PERTURBATIONS = {
     "typos_light": partial(inject_typos, rate=0.05),
     "typos_heavy": partial(inject_typos, rate=0.15),
@@ -118,7 +118,7 @@ DEFAULT_PERTURBATIONS = {
 
 
 # ============================================================
-# Evaluation
+# Évaluation
 # ============================================================
 
 
@@ -138,11 +138,11 @@ def evaluate_robustness(
     random_state: int = 42,
 ) -> pd.DataFrame:
     """
-    Evaluate ``model`` on the clean test set, then on each perturbed copy
-    in ``perturbations`` (defaults to ``DEFAULT_PERTURBATIONS``). Returns
-    one row per condition (``"clean"`` first) with the three headline
-    metrics plus their delta versus the clean baseline — a negative delta
-    means the perturbation hurt performance.
+    Évalue ``model`` sur l'ensemble de test propre, puis sur chaque copie perturbée
+    de ``perturbations`` (par défaut ``DEFAULT_PERTURBATIONS``). Retourne
+    une ligne par condition (``"clean"`` en premier) avec les trois métriques
+    principales plus leur delta par rapport à la baseline propre — un delta négatif
+    signifie que la perturbation a nui à la performance.
     """
     if perturbations is None:
         perturbations = DEFAULT_PERTURBATIONS
@@ -178,9 +178,9 @@ def evaluate_robustness(
 
 def summarize_worst_case(report: pd.DataFrame) -> dict:
     """
-    Worst-case degradation across every non-clean perturbation in a
-    ``evaluate_robustness`` report — the single number to watch: "how bad
-    can it get on realistically messy input?".
+    Pire dégradation parmi toutes les perturbations non "clean" d'un
+    rapport ``evaluate_robustness`` — le chiffre unique à surveiller : "à quel point
+    ça peut être mauvais sur une entrée réaliste et désordonnée ?".
     """
     perturbed = report[report["perturbation"] != "clean"]
     if perturbed.empty:
@@ -196,11 +196,11 @@ def summarize_worst_case(report: pd.DataFrame) -> dict:
 
 def run() -> pd.DataFrame:
     """
-    Load the current champion (registered "production" alias, falling
-    back to "staging" if nothing is promoted yet), rebuild the same
-    train/test split used to train it, run ``evaluate_robustness`` on the
-    "raw" text variant's test set, write the report to
-    ``paths.ROBUSTNESS_REPORT_PATH`` and return it.
+    Charge le champion actuel (alias "production" enregistré, avec repli
+    sur "staging" si rien n'est encore promu), reconstruit le même
+    split train/test que celui utilisé pour l'entraîner, exécute ``evaluate_robustness`` sur
+    l'ensemble de test de la variante de texte "raw", écrit le rapport dans
+    ``paths.ROBUSTNESS_REPORT_PATH`` et le retourne.
     """
     import logging
 

@@ -1,1 +1,1 @@
-"""Data ingestion and cleaning utilities for the Mental Health Intelligence project."""
+"""Utilitaires d'ingestion et de nettoyage des données pour le projet Mental Health Intelligence."""

@@ -1,34 +1,38 @@
 """
-DistilBERT fine-tuning (Phase 11, remaining slice: "DistilBERT
-(fine-tuning léger)") -- the "full transformer fine-tune" end of the
-spectrum this project's roadmap always meant to compare against, with the
-frozen sentence-embedding candidates (``embedding_wrapper.py``) as the
-deliberately cheaper "solution intermediaire" in between TF-IDF and this.
+Fine-tuning de DistilBERT (Phase 11, slice restante : "DistilBERT
+(fine-tuning léger)") -- l'extrémité "full transformer fine-tune" du
+spectre auquel la roadmap de ce projet a toujours prévu de se comparer,
+les candidats à sentence-embedding gelés (``embedding_wrapper.py``) étant
+la "solution intermediaire" délibérément moins coûteuse entre TF-IDF et
+ceci.
 
-Unlike every classical candidate in ``model_registry.py``, this is NOT
-wired into the nested-CV benchmark (``benchmark.py``) or the champion
-selection (``champion.py``) -- fine-tuning a transformer inside a nested
-CV loop (outer x inner x hyperparameter grid) would mean dozens of
-multi-epoch training runs, which is not a "léger" fine-tune, it's a
-different order of magnitude of compute. Instead this trains ONE model on
-the same train/test split ``train.py`` uses (via ``build_splits``), with a
-small fixed hyperparameter set, and reports the same headline metrics
-(f1_macro, recall_macro, critical_recall) plus MCC -- directly comparable
-to a row of ``model_comparison.csv`` -- so it can be read side by side with
-every classical/embedding candidate without pretending it went through
-the same nested-CV rigor.
+Contrairement à tous les candidats classiques de ``model_registry.py``,
+ceci N'EST PAS branché sur le benchmark de nested CV (``benchmark.py``) ni
+sur la sélection du champion (``champion.py``) -- fine-tuner un
+transformer à l'intérieur d'une boucle de nested CV (externe x interne x
+grille d'hyperparamètres) impliquerait des dizaines d'exécutions
+d'entraînement multi-époques, ce qui n'est pas un fine-tune "léger", c'est
+un ordre de grandeur de calcul différent. À la place, ceci entraîne UN
+seul modèle sur le même split train/test que celui utilisé par
+``train.py`` (via ``build_splits``), avec un petit ensemble
+d'hyperparamètres fixes, et rapporte les mêmes métriques principales
+(f1_macro, recall_macro, critical_recall) plus le MCC -- directement
+comparable à une ligne de ``model_comparison.csv`` -- pour pouvoir être lu
+côte à côte avec chaque candidat classique/embedding sans prétendre être
+passé par la même rigueur de nested CV.
 
-``torch``/``transformers``/``datasets`` are imported lazily (inside
-functions, never at module import time), exactly like
-``embedding_wrapper.py``'s ``sentence-transformers`` import -- so this
-module can be imported (e.g. by a test, or by something that just wants
-``DISTILBERT_MODEL_NAME``) without the heavy ``transformers`` extra
-installed. Actually training requires ``pip install -e ".[transformers]"``
-and, realistically, a GPU -- CPU fine-tuning of even DistilBERT on this
-dataset will be slow; this is deliberately left to run from Ana's own
-machine (device_bash here has no GPU and can't run the Windows venv
-anyway), same convention as every other real training run in this
-project.
+``torch``/``transformers``/``datasets`` sont importés paresseusement (dans
+les fonctions, jamais au niveau du module), exactement comme l'import de
+``sentence-transformers`` dans ``embedding_wrapper.py`` -- afin que ce
+module puisse être importé (par exemple par un test, ou par quelque chose
+qui veut juste ``DISTILBERT_MODEL_NAME``) sans que l'extra ``transformers``
+(lourd) soit installé. Entraîner réellement le modèle nécessite
+``pip install -e ".[transformers]"`` et, de manière réaliste, un GPU -- le
+fine-tuning CPU même de DistilBERT sur ce dataset sera lent ; ceci est
+volontairement laissé à exécuter depuis la propre machine d'Ana (le
+device_bash ici n'a pas de GPU et ne peut de toute façon pas exécuter le
+venv Windows), même convention que pour tout autre entraînement réel de
+ce projet.
 """
 from __future__ import annotations
 
@@ -50,7 +54,7 @@ DEFAULT_LEARNING_RATE = 2e-5
 
 
 class _TextDataset:
-    """Minimal torch Dataset wrapping tokenized texts + integer labels."""
+    """Dataset torch minimal enveloppant des textes tokenizés + des labels entiers."""
 
     def __init__(self, encodings, labels: list[int]):
         self.encodings = encodings
@@ -75,7 +79,7 @@ def _build_label_maps(labels: list[str]) -> tuple[dict[str, int], dict[int, str]
 
 
 def _compute_metrics_fn(id_to_label: dict[int, str]):
-    """Build the ``compute_metrics`` callback the HF Trainer calls after each eval pass."""
+    """Construit le callback ``compute_metrics`` que le Trainer HF appelle après chaque passe d'évaluation."""
 
     def _compute(eval_pred):
         logits, label_ids = eval_pred
@@ -104,14 +108,15 @@ def finetune_distilbert(
     output_dir: str | None = None,
 ) -> dict:
     """
-    Fine-tune ``model_name`` (DistilBERT by default) as a sequence
-    classifier on ``X_train``/``y_train``, evaluate on ``X_test``/
-    ``y_test``, and return the trained pipeline (tokenizer + model) plus
-    the same headline metrics used everywhere else in this project.
+    Fine-tune ``model_name`` (DistilBERT par défaut) comme classifieur de
+    séquence sur ``X_train``/``y_train``, évalue sur ``X_test``/
+    ``y_test``, et retourne le pipeline entraîné (tokenizer + modèle) plus
+    les mêmes métriques principales utilisées partout ailleurs dans ce
+    projet.
 
-    Requires the ``transformers`` extra
+    Nécessite l'extra ``transformers``
     (``pip install -e ".[transformers]"``) -- ``torch``, ``transformers``
-    are imported here, not at module level.
+    sont importés ici, pas au niveau du module.
     """
     import torch
     from transformers import (
@@ -152,7 +157,7 @@ def finetune_distilbert(
         eval_strategy="epoch",
         save_strategy="no",
         logging_steps=50,
-        report_to=[],  # this project logs to MLflow explicitly, not via the HF integration
+        report_to=[],  # ce projet logge vers MLflow explicitement, pas via l'intégration HF
         fp16=torch.cuda.is_available(),
     )
 
@@ -181,13 +186,15 @@ def finetune_distilbert(
 
 def run(num_epochs: int = DEFAULT_NUM_EPOCHS) -> dict:
     """
-    End-to-end runner: load the same clean dataset and train/test split
-    ``train.py`` uses (raw text variant only -- masking is a leakage
-    control for TF-IDF's literal token matching; a fine-tuned transformer's
-    exposure to diagnostic terms is a separate, not-yet-scoped question),
-    fine-tune DistilBERT, write its metrics next to the classical
-    ``model_comparison.csv`` (as ``paths.DISTILBERT_METRICS_PATH``) so both
-    are readable side by side, and save the fine-tuned model under
+    Runner de bout en bout : charge le même dataset nettoyé et le même
+    split train/test que ``train.py`` utilise (variante de texte raw
+    uniquement -- le masking est un contrôle de fuite pour la
+    correspondance littérale de tokens de TF-IDF ; l'exposition d'un
+    transformer fine-tuné aux termes diagnostiques est une question
+    séparée, pas encore cadrée), fine-tune DistilBERT, écrit ses métriques
+    à côté du ``model_comparison.csv`` classique (dans
+    ``paths.DISTILBERT_METRICS_PATH``) pour que les deux soient lisibles
+    côte à côte, et sauvegarde le modèle fine-tuné dans
     ``paths.DISTILBERT_MODEL_DIR``.
     """
     from mental_health.config.paths import (

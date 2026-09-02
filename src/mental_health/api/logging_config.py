@@ -1,15 +1,15 @@
-"""Structured (JSON) logging setup — Phase 10 (Monitoring).
+"""Configuration de logging structuré (JSON) — Phase 10 (Monitoring).
 
-Plain-text logs are fine to read in a dev terminal, but hard to grep or
-aggregate once this API runs anywhere else (Docker logs, and eventually a
-log aggregator in Phase 13). This configures the root logger to emit one
-JSON object per line instead, with a small set of fixed fields plus
-whatever `extra=` a call site adds.
+Les logs en texte brut sont pratiques à lire dans un terminal de dev, mais difficiles à grep ou
+à agréger dès que cette API tourne ailleurs (logs Docker, et éventuellement un
+agrégateur de logs en Phase 13). Ceci configure le root logger pour émettre un
+objet JSON par ligne à la place, avec un petit ensemble de champs fixes plus
+tout ce qu'un `extra=` ajouté par un site d'appel contient.
 
-This does NOT change what gets logged, only how it's formatted — call
-sites (main.py) are still solely responsible for never passing raw
-request text into `extra`. See main.py's `predict()` for the one call
-site that matters for privacy.
+Ceci ne change PAS ce qui est loggé, seulement la façon dont c'est formaté — les
+sites d'appel (main.py) restent seuls responsables de ne jamais passer de
+texte brut de requête dans `extra`. Voir `predict()` dans main.py pour l'unique
+site d'appel qui compte pour la confidentialité.
 """
 from __future__ import annotations
 
@@ -17,14 +17,14 @@ import json
 import logging
 import sys
 
-# Every attribute a stock LogRecord carries, so we can tell "extra" fields
-# (added by a call site via `logger.info(..., extra={...})`) apart from the
-# record's own built-in attributes.
+# Tous les attributs qu'un LogRecord standard possède, afin de pouvoir distinguer les
+# champs "extra" (ajoutés par un site d'appel via `logger.info(..., extra={...})`) des
+# attributs natifs propres au record.
 _RESERVED = frozenset(vars(logging.LogRecord("", 0, "", 0, "", None, None)).keys()) | {"message", "asctime"}
 
 
 class JSONFormatter(logging.Formatter):
-    """Renders each LogRecord as one JSON object per line."""
+    """Rend chaque LogRecord sous forme d'un objet JSON par ligne."""
 
     def format(self, record: logging.LogRecord) -> str:
         payload = {
@@ -41,11 +41,11 @@ class JSONFormatter(logging.Formatter):
 
 
 def configure_logging(level: int = logging.INFO) -> None:
-    """Point the root logger at a single JSON-formatted stdout handler.
+    """Fait pointer le root logger vers un unique handler stdout formaté en JSON.
 
-    Safe to call more than once (e.g. once at import time, and again if a
-    test needs to reset it) — it always replaces the handler list rather
-    than appending, so logs are never duplicated.
+    Peut être appelée plusieurs fois sans risque (par exemple une fois à l'import, puis
+    de nouveau si un test a besoin de la réinitialiser) — elle remplace toujours la liste
+    de handlers plutôt que d'y ajouter, afin que les logs ne soient jamais dupliqués.
     """
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JSONFormatter())

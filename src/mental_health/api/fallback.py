@@ -1,19 +1,19 @@
 """
-Deterministic, keyword-based fallback prediction — used ONLY when no real
-model is available (see ``model_loader.load_production_model``).
+Prédiction de secours déterministe, basée sur des mots-clés — utilisée UNIQUEMENT lorsqu'aucun
+modèle réel n'est disponible (voir ``model_loader.load_production_model``).
 
-This is explicitly NOT a clinical model. It exists so the API stays usable
-in degraded mode (e.g. local dev before anything is promoted, or a
-Registry outage) instead of hard-failing every request. ``main.py`` always
-tags responses produced by this module with ``is_demo_fallback=True`` so
-no caller can mistake it for a real prediction.
+Ceci n'est explicitement PAS un modèle clinique. Elle existe pour que l'API reste utilisable
+en mode dégradé (par exemple en développement local avant qu'un modèle ne soit promu, ou lors d'une
+panne du Registry) plutôt que de faire échouer chaque requête. ``main.py`` marque toujours
+les réponses produites par ce module avec ``is_demo_fallback=True`` afin qu'aucun
+appelant ne puisse la confondre avec une véritable prédiction.
 """
 from __future__ import annotations
 
 from mental_health.config.paths import CLASS_LABELS
 
-# Small, illustrative keyword sets — good enough to make demo mode behave
-# sensibly, not a substitute for the trained model. Deliberately simple.
+# Ensembles de mots-clés petits et illustratifs — suffisants pour que le mode démo se comporte
+# de façon raisonnable, mais ne remplacent pas le modèle entraîné. Volontairement simples.
 _KEYWORDS: dict[str, list[str]] = {
     "ADHD": ["adhd", "hyperactive", "hyperactivity", "distracted", "can't focus", "inattentive"],
     "Anxiety": ["anxious", "anxiety", "panic", "worry", "worried", "on edge"],
@@ -24,18 +24,18 @@ _KEYWORDS: dict[str, list[str]] = {
     "Schizophrenia": ["schizophrenia", "psychosis", "hallucinat", "hearing voices", "paranoid"],
 }
 
-# Deliberately low, so a real model is never outperformed on paper by the fallback.
+# Volontairement bas, afin qu'un modèle réel ne soit jamais surpassé sur le papier par le fallback.
 _MATCH_CONFIDENCE = 0.35
 _NO_MATCH_CONFIDENCE = 1.0 / len(CLASS_LABELS)
 
 
 def fallback_demo_prediction(text: str) -> tuple[str, float, dict[str, float]]:
     """
-    Very simple keyword-count heuristic over ``CLASS_LABELS``.
+    Heuristique très simple de comptage de mots-clés sur ``CLASS_LABELS``.
 
-    Returns (label, confidence, probabilities) with the same shape as the
-    real model's output, so ``main.py`` can build a ``PredictResponse``
-    identically either way.
+    Retourne (label, confidence, probabilities) avec la même forme que la
+    sortie du modèle réel, afin que ``main.py`` puisse construire une ``PredictResponse``
+    de façon identique dans les deux cas.
     """
     lowered = text.lower()
     scores = {label: sum(lowered.count(kw) for kw in keywords) for label, keywords in _KEYWORDS.items()}

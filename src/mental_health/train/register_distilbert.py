@@ -1,33 +1,33 @@
 """
-Register the already fine-tuned DistilBERT candidate (see
-``distilbert_finetune.py``) in the MLflow Model Registry as the current
-"staging" candidate — on the same footing as every classical/embedding
-champion ``train.py`` produces — so ``promote.py``'s existing, UNCHANGED
-gate (``f1_macro`` AND ``critical_recall`` must not regress vs. current
-"production") can decide whether it becomes the new production model.
+Enregistre le candidat DistilBERT déjà fine-tuné (voir
+``distilbert_finetune.py``) dans le MLflow Model Registry comme le candidat
+"staging" actuel — sur le même pied que tout champion classique/embedding
+que ``train.py`` produit — afin que la porte existante et INCHANGÉE de
+``promote.py`` (``f1_macro`` ET ``critical_recall`` ne doivent pas régresser vs. la
+"production" actuelle) puisse décider s'il devient le nouveau modèle de production.
 
-Why a separate script instead of wiring DistilBERT into
-``run_champion_stage``: fine-tuning is deliberately NOT run through nested
-CV (see ``distilbert_finetune.py``'s docstring) — it is trained once, out
-of band, directly on Ana's machine. This script only does the two things
-``run_champion_stage`` does for every other champion once training is
-done: log an MLflow run with the model + metrics, and alias it "staging".
-Actually deciding promotion is still a separate, explicit step —
-``python -m mental_health.train.promote`` — unchanged by this script.
+Pourquoi un script séparé plutôt que de brancher DistilBERT dans
+``run_champion_stage`` : le fine-tuning n'est délibérément PAS exécuté à travers la
+nested CV (voir la docstring de ``distilbert_finetune.py``) — il est entraîné une fois, hors
+bande, directement sur la machine d'Ana. Ce script ne fait que les deux choses que
+``run_champion_stage`` fait pour tout autre champion une fois l'entraînement
+terminé : logger un run MLflow avec le modèle + les métriques, et l'aliaser "staging".
+Décider effectivement de la promotion reste une étape séparée et explicite —
+``python -m mental_health.train.promote`` — inchangée par ce script.
 
-NOTE (previously a caveat, now resolved): ``mental_health.api.model_loader``
-and ``mental_health.api.main`` are flavor-aware — they detect whether the
-"production"-aliased model is a scikit-learn pipeline or a Transformers
-pipeline (via ``mlflow.models.get_model_info(...).flavors``) and dispatch
-accordingly, so a DistilBERT candidate promoted here IS servable through
-the same ``/predict`` contract as a classical model, no further change
-needed.
+NOTE (autrefois une mise en garde, désormais résolue) : ``mental_health.api.model_loader``
+et ``mental_health.api.main`` sont conscients du flavor — ils détectent si
+le modèle aliasé "production" est un pipeline scikit-learn ou un pipeline
+Transformers (via ``mlflow.models.get_model_info(...).flavors``) et se répartissent
+en conséquence, donc un candidat DistilBERT promu ici EST servable via
+le même contrat ``/predict`` qu'un modèle classique, sans changement
+supplémentaire nécessaire.
 
-Requires the ``transformers`` extra (``pip install -e ".[transformers]"``)
-— ``torch``/``transformers`` are imported lazily, inside
-``register_distilbert_candidate``, not at module level, so
-``load_distilbert_metrics`` (and this module's import) stay usable without
-that heavy extra installed — same convention as ``distilbert_finetune.py``.
+Nécessite l'extra ``transformers`` (``pip install -e ".[transformers]"``)
+— ``torch``/``transformers`` sont importés paresseusement, à l'intérieur de
+``register_distilbert_candidate``, pas au niveau du module, afin que
+``load_distilbert_metrics`` (et l'import de ce module) restent utilisables sans
+cet extra volumineux installé — même convention que ``distilbert_finetune.py``.
 """
 from __future__ import annotations
 
@@ -38,9 +38,9 @@ import mlflow
 import pandas as pd
 from dotenv import load_dotenv
 
-# Must run before the mlflow_config import below reads MLFLOW_TRACKING_URI /
-# MLFLOW_ARTIFACT_ROOT from the environment — see mlflow_config.py's
-# docstring (same convention as train.py / promote.py).
+# Doit s'exécuter avant que l'import mlflow_config ci-dessous ne lise MLFLOW_TRACKING_URI /
+# MLFLOW_ARTIFACT_ROOT depuis l'environnement — voir la docstring de
+# mlflow_config.py (même convention que train.py / promote.py).
 load_dotenv()
 
 from mental_health.config.mlflow_config import (  # noqa: E402
@@ -57,13 +57,13 @@ from mental_health.config.paths import (  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-# The headline metrics every candidate in this project reports (matches
-# the columns evaluate_final_model / finetune_distilbert both produce).
+# Les métriques principales que tout candidat de ce projet rapporte (correspond
+# aux colonnes que produisent à la fois evaluate_final_model et finetune_distilbert).
 EXPECTED_METRICS = ["f1_macro", "recall_macro", "critical_recall", "mcc"]
 
 
 def _get_or_create_experiment(name: str, artifact_location: str) -> str:
-    """Get the experiment by name, creating it (with an explicit artifact location) if missing."""
+    """Récupère l'expérience par son nom, la crée (avec un emplacement d'artefact explicite) si elle n'existe pas."""
     experiment = mlflow.get_experiment_by_name(name)
     if experiment is not None:
         return experiment.experiment_id
@@ -72,9 +72,9 @@ def _get_or_create_experiment(name: str, artifact_location: str) -> str:
 
 def load_distilbert_metrics(metrics_path: Path = DISTILBERT_METRICS_PATH) -> dict:
     """
-    Read the single-row metrics CSV written by ``distilbert_finetune.run()``
-    and return just the headline metrics, as a plain dict — the same shape
-    ``promote.get_metrics_for_version`` returns for any other candidate.
+    Lit le CSV de métriques à une seule ligne écrit par ``distilbert_finetune.run()``
+    et retourne uniquement les métriques principales, sous forme de simple dict — la même forme
+    que retourne ``promote.get_metrics_for_version`` pour tout autre candidat.
     """
     df = pd.read_csv(metrics_path)
     if len(df) != 1:
@@ -97,19 +97,19 @@ def register_distilbert_candidate(
     metrics_path: Path = DISTILBERT_METRICS_PATH,
 ) -> str:
     """
-    Log the fine-tuned DistilBERT model (from ``model_dir``) plus its
-    metrics (from ``metrics_path``) as one MLflow run, register it under
-    ``MLFLOW_REGISTERED_MODEL_NAME``, and alias it "staging" — exactly
-    like ``run_champion_stage`` does for every classical/embedding
-    champion. Returns the registered version string.
+    Logue le modèle DistilBERT fine-tuné (depuis ``model_dir``) plus ses
+    métriques (depuis ``metrics_path``) comme un seul run MLflow, l'enregistre sous
+    ``MLFLOW_REGISTERED_MODEL_NAME``, et l'aliase "staging" — exactement
+    comme ``run_champion_stage`` le fait pour tout champion
+    classique/embedding. Retourne la chaîne de version enregistrée.
 
-    Overwrites whichever version is currently aliased "staging" — this is
-    the same behaviour every other training run already has (see
-    ``train.py``'s docstring, point 5): "staging" always means "the most
-    recently trained candidate, not yet promoted", never "the best one
-    seen so far".
+    Écrase quelle que soit la version actuellement aliasée "staging" — c'est
+    le même comportement que tout autre run d'entraînement a déjà (voir
+    la docstring de ``train.py``, point 5) : "staging" signifie toujours "le
+    candidat entraîné le plus récemment, pas encore promu", jamais "le meilleur
+    vu jusqu'ici".
     """
-    import torch  # noqa: F401 -- imported for its side effect: a clear ImportError here if the transformers extra isn't installed, before doing any MLflow work
+    import torch  # noqa: F401 -- importé pour son effet de bord : une ImportError claire ici si l'extra transformers n'est pas installé, avant de faire tout travail MLflow
     from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
 
     metrics = load_distilbert_metrics(metrics_path)
@@ -120,13 +120,13 @@ def register_distilbert_candidate(
 
     tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
     model = AutoModelForSequenceClassification.from_pretrained(str(model_dir))
-    # top_k=None and truncation=True are both set here for a clean initial
-    # pipeline, but neither is guaranteed to survive the MLflow log/load
-    # round-trip -- every caller (main.py, drift_check.py) passes both
-    # explicitly again at call time. See main.py's
-    # _predict_with_transformers_model docstring for why (an untruncated
-    # text past the model's 512-token limit crashes PyTorch's position
-    # embeddings instead of failing gracefully).
+    # top_k=None et truncation=True sont tous deux définis ici pour un pipeline
+    # initial propre, mais rien ne garantit que ni l'un ni l'autre survivent à l'aller-retour
+    # log/load de MLflow -- chaque appelant (main.py, drift_check.py) passe à nouveau les
+    # deux explicitement au moment de l'appel. Voir la docstring de
+    # _predict_with_transformers_model dans main.py pour la raison (un texte non tronqué
+    # dépassant la limite de 512 tokens du modèle fait planter les position
+    # embeddings de PyTorch au lieu d'échouer proprement).
     text_classification_pipeline = pipeline(
         "text-classification", model=model, tokenizer=tokenizer, top_k=None, truncation=True
     )
@@ -137,10 +137,10 @@ def register_distilbert_candidate(
         mlflow.log_param("text_variant", "raw")
         mlflow.log_param("base_model", getattr(model.config, "_name_or_path", "distilbert-base-uncased"))
         mlflow.log_param("num_labels", model.config.num_labels)
-        # Not benchmarked through nested CV (see this module's docstring) --
-        # logged explicitly so this candidate's run is never mistaken for
-        # one that went through the same rigor as every classical/embedding
-        # candidate in run_benchmark_stage.
+        # Non benchmarké via nested CV (voir la docstring de ce module) --
+        # loggé explicitement pour que le run de ce candidat ne soit jamais confondu
+        # avec un candidat étant passé par la même rigueur que tout candidat
+        # classique/embedding dans run_benchmark_stage.
         mlflow.log_param("nested_cv_benchmarked", False)
 
         for name, value in metrics.items():

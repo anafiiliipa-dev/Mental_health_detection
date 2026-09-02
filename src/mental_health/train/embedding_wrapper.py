@@ -1,24 +1,25 @@
 """
-sklearn-compatible sentence-embedding feature extractor (Phase 11:
+Extracteur de features par sentence-embedding compatible sklearn (Phase 11 :
 "tester une solution intermediaire: embeddings sentence-transformers
 (MiniLM deja utilise pour le RAG) + LogisticRegression/SVM").
 
-Design decision (confirmed with the project owner): unlike TF-IDF, MiniLM
-embeddings are expensive to compute and come from a frozen, pretrained
-model -- there is no fitting involved, so recomputing them inside every
-nested-CV fold (as TfidfVectorizer legitimately needs to, since IDF
-weights depend on the training fold) would be pure waste, not rigor. The
-whole dataset's embeddings are therefore precomputed ONCE
-(``precompute_dataset_embeddings``) before the benchmark runs, and
-``EmbeddingVectorizer`` looks them up from that shared cache instead of
-re-encoding on every fit/transform call.
+Décision de conception (confirmée avec le propriétaire du projet) : contrairement
+à TF-IDF, les embeddings MiniLM sont coûteux à calculer et proviennent d'un
+modèle pré-entraîné et gelé -- il n'y a pas de fitting impliqué, donc les
+recalculer à chaque fold de la nested-CV (comme TfidfVectorizer doit
+légitimement le faire, puisque les poids IDF dépendent du fold
+d'entraînement) serait du gaspillage pur, pas de la rigueur. Les embeddings de
+tout le dataset sont donc précalculés UNE SEULE FOIS
+(``precompute_dataset_embeddings``) avant l'exécution du benchmark, et
+``EmbeddingVectorizer`` va les chercher dans ce cache partagé au lieu de
+les recalculer à chaque appel fit/transform.
 
-``sentence-transformers`` is imported lazily (inside functions/methods,
-never at module import time) so that importing this module -- and
-therefore ``model_registry.py``, which imports it unconditionally --
-never requires the (heavy, torch-backed) dependency to be installed.
-Only code paths that actually build or use an embedding-based candidate
-need the ``embedding_models`` extra installed.
+``sentence-transformers`` est importé paresseusement (dans les fonctions/méthodes,
+jamais au moment de l'import du module) afin que l'import de ce module -- et
+donc de ``model_registry.py``, qui l'importe sans condition -- ne requière
+jamais que la dépendance (lourde, basée sur torch) soit installée.
+Seuls les chemins de code qui construisent ou utilisent réellement un candidat
+basé sur des embeddings ont besoin de l'extra ``embedding_models`` installé.
 """
 from __future__ import annotations
 
@@ -33,14 +34,14 @@ def precompute_dataset_embeddings(
     texts: pd.Series, model_name: str = DEFAULT_EMBEDDING_MODEL
 ) -> dict[str, np.ndarray]:
     """
-    Encode every distinct text in ``texts`` once and return a
-    ``{text: embedding_vector}`` cache. Meant to be computed once over the
-    FULL dataset (train + test rows) before any CV split, so every lookup
-    during benchmarking/training/evaluation is a cache hit.
+    Encode chaque texte distinct de ``texts`` une seule fois et retourne un
+    cache ``{text: embedding_vector}``. Conçu pour être calculé une seule fois sur
+    TOUT le dataset (lignes train + test) avant tout split de CV, afin que chaque
+    recherche pendant le benchmark/l'entraînement/l'évaluation soit un cache hit.
     """
     from sentence_transformers import SentenceTransformer
 
-    unique_texts = list(dict.fromkeys(texts))  # de-dup, preserves order
+    unique_texts = list(dict.fromkeys(texts))  # de-dup, préserve l'ordre
     model = SentenceTransformer(model_name)
     vectors = model.encode(unique_texts, show_progress_bar=False)
     return dict(zip(unique_texts, vectors, strict=True))
@@ -48,16 +49,16 @@ def precompute_dataset_embeddings(
 
 class EmbeddingVectorizer(BaseEstimator, TransformerMixin):
     """
-    Turns text into sentence-transformer embeddings. ``fit`` is a no-op
-    (the underlying model is frozen/pretrained -- there is nothing to
-    learn from the training fold, unlike TfidfVectorizer's IDF weights).
+    Transforme du texte en embeddings sentence-transformer. ``fit`` est un no-op
+    (le modèle sous-jacent est gelé/pré-entraîné -- il n'y a rien à
+    apprendre du fold d'entraînement, contrairement aux poids IDF de TfidfVectorizer).
 
-    ``embedding_cache``, when provided (a shared dict, typically from
-    ``precompute_dataset_embeddings``), is checked first; any text not
-    already in it is encoded on demand and added to the cache -- this
-    keeps the object correct even for text it has never seen (e.g. a real
-    user's /predict request at serving time), not just fast during
-    training.
+    ``embedding_cache``, lorsqu'il est fourni (un dict partagé, typiquement issu de
+    ``precompute_dataset_embeddings``), est vérifié en premier ; tout texte pas
+    déjà présent est encodé à la demande et ajouté au cache -- cela
+    garde l'objet correct même pour du texte jamais vu (par exemple une vraie
+    requête /predict d'un utilisateur en serving), pas seulement rapide pendant
+    l'entraînement.
     """
 
     def __init__(self, model_name: str = DEFAULT_EMBEDDING_MODEL, embedding_cache: dict[str, np.ndarray] | None = None):

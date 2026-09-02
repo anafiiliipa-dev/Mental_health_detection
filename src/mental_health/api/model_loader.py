@@ -1,42 +1,44 @@
 """
-Loads the "production"-aliased model from the MLflow Model Registry for
-the FastAPI service.
+Charge le modèle avec l'alias "production" depuis le MLflow Model Registry pour
+le service FastAPI.
 
-Design decision (confirmed with the project owner before writing this
-file): if no model is aliased "production" — Registry empty, MLflow
-unreachable, etc. — the API must still start. ``load_production_model()``
-never raises; it returns a ``LoadedModel`` whose ``model`` is ``None`` and
-whose ``error`` explains why. Callers (``main.py``) fall back to a clearly
-labelled demo heuristic, mirroring the existing graceful-degradation
-pattern already used in ``mental_health.models.services`` (``load_model``
-returning a ``(model, path, error)`` tuple + ``fallback_demo_prediction``).
-An unavailable ML model must never take the whole API down — this is a
-triage tool, not the sole gate to care.
+Décision de conception (confirmée avec le propriétaire du projet avant d'écrire ce
+fichier) : si aucun modèle n'a l'alias "production" — Registry vide, MLflow
+injoignable, etc. — l'API doit quand même démarrer. ``load_production_model()``
+ne lève jamais d'exception ; elle retourne un ``LoadedModel`` dont ``model`` vaut
+``None`` et dont ``error`` explique pourquoi. Les appelants (``main.py``) se
+rabattent sur une heuristique de démo clairement étiquetée, reprenant le pattern
+de dégradation gracieuse déjà utilisé dans ``mental_health.models.services``
+(``load_model`` renvoyant un tuple ``(model, path, error)`` + ``fallback_demo_prediction``).
+Un modèle ML indisponible ne doit jamais faire tomber toute l'API — c'est un
+outil de triage, pas l'unique porte d'accès aux soins.
 
-Flavor dispatch (added after DistilBERT joined the candidate pool via
-``register_distilbert.py``): ``promote.py``'s promotion gate only compares
-``f1_macro``/``critical_recall`` — it has no notion of "model type", so
-whatever is aliased "production" can be either a classical/embedding
-scikit-learn champion (``train.py``, ``mlflow.sklearn.log_model``) or the
-fine-tuned DistilBERT (``mlflow.transformers.log_model``). This loader
-detects which one it actually got and loads it with the matching MLflow
-flavor loader, so a promotion never silently breaks the API (as it did
-before this change: ``mlflow.sklearn.load_model`` raising
-"Model does not have the sklearn flavor" against a promoted DistilBERT
-version, degrading straight to the demo fallback).
+Dispatch par flavor (ajouté après l'arrivée de DistilBERT dans le pool de
+candidats via ``register_distilbert.py``) : le portail de promotion de
+``promote.py`` compare uniquement ``f1_macro``/``critical_recall`` — il n'a
+aucune notion de "type de modèle", donc ce qui a l'alias "production" peut
+être soit un champion classique/embedding scikit-learn (``train.py``,
+``mlflow.sklearn.log_model``), soit le DistilBERT fine-tuné
+(``mlflow.transformers.log_model``). Ce loader détecte lequel des deux il a
+réellement reçu et le charge avec le loader MLflow du flavor correspondant,
+afin qu'une promotion ne casse jamais silencieusement l'API (comme c'était
+le cas avant ce changement : ``mlflow.sklearn.load_model`` levait
+"Model does not have the sklearn flavor" face à une version DistilBERT
+promue, dégradant directement vers le fallback de démo).
 
-``mlflow.transformers`` is imported lazily, inside ``load_production_model``,
-and only on the branch that actually needs it — the Docker image only
-installs the ``api``/``mlflow`` extras (see ``Dockerfile``), NOT
-``transformers`` (torch alone is ~2GB and would balloon every deploy just
-to support a candidate that is normally in "staging", not "production").
-A module-level ``import mlflow.transformers`` would make importing this
-module — and therefore starting the API at all — fail outright wherever
-that extra isn't installed, even when serving a plain scikit-learn
-champion. Lazy import keeps the common case (sklearn in production)
-working unchanged in the slim image; serving a promoted DistilBERT
-version for real additionally requires building the image with the
-``transformers`` extra (see ``Dockerfile``'s comment).
+``mlflow.transformers`` est importé de façon paresseuse (lazy), à l'intérieur de
+``load_production_model``, et uniquement sur la branche qui en a réellement
+besoin — l'image Docker installe uniquement les extras ``api``/``mlflow``
+(voir ``Dockerfile``), PAS ``transformers`` (torch à lui seul pèse ~2 Go et
+gonflerait chaque déploiement juste pour supporter un candidat qui est
+normalement en "staging", pas en "production"). Un ``import mlflow.transformers``
+au niveau module ferait échouer purement et simplement l'import de ce module
+— et donc le démarrage de l'API — partout où cet extra n'est pas installé,
+même en servant un simple champion scikit-learn. L'import paresseux garde
+le cas courant (sklearn en production) fonctionnel sans changement dans
+l'image allégée ; servir réellement une version DistilBERT promue nécessite
+en plus de construire l'image avec l'extra ``transformers`` (voir le
+commentaire du ``Dockerfile``).
 """
 from __future__ import annotations
 
@@ -55,19 +57,19 @@ from mental_health.config.mlflow_config import (
 
 logger = logging.getLogger(__name__)
 
-# The two model flavors this project's registry can currently contain --
-# every classical/embedding champion (mlflow.sklearn.log_model) and the
-# DistilBERT fine-tune (mlflow.transformers.log_model, see
-# register_distilbert.py). Checked in this order so a model logged with
-# both flavors present (shouldn't happen here, but MLmodel files can in
-# principle list more than one) prefers the lighter, already-installed
-# sklearn loader.
+# Les deux flavors de modèle que le registry de ce projet peut actuellement
+# contenir -- tout champion classique/embedding (mlflow.sklearn.log_model) et
+# le fine-tune DistilBERT (mlflow.transformers.log_model, voir
+# register_distilbert.py). Vérifiés dans cet ordre afin qu'un modèle loggé
+# avec les deux flavors présents (ne devrait pas arriver ici, mais un fichier
+# MLmodel peut en principe en lister plusieurs) préfère le loader sklearn,
+# plus léger et déjà installé.
 SUPPORTED_FLAVORS = ("sklearn", "transformers")
 
 
 @dataclass
 class LoadedModel:
-    """Result of attempting to load the production model."""
+    """Résultat d'une tentative de chargement du modèle de production."""
 
     model: Any | None
     flavor: str | None
@@ -83,11 +85,12 @@ class LoadedModel:
 
 def _detect_flavor(model_uri: str) -> str:
     """
-    Which of ``SUPPORTED_FLAVORS`` this model version was logged with.
+    Lequel des ``SUPPORTED_FLAVORS`` a été utilisé pour logger cette version
+    de modèle.
 
-    Raises ``ValueError`` if it's neither — ``load_production_model``
-    catches this and turns it into a ``LoadedModel.error`` instead of
-    letting the API crash on an unexpected/future flavor.
+    Lève ``ValueError`` si ce n'est ni l'un ni l'autre — ``load_production_model``
+    intercepte cette exception et la transforme en ``LoadedModel.error``
+    plutôt que de laisser l'API planter sur un flavor inattendu/futur.
     """
     info = mlflow.models.get_model_info(model_uri)
     for flavor in SUPPORTED_FLAVORS:
@@ -98,18 +101,18 @@ def _detect_flavor(model_uri: str) -> str:
 
 def load_production_model(model_name: str = MLFLOW_REGISTERED_MODEL_NAME) -> LoadedModel:
     """
-    Load the model currently aliased "production" in the MLflow Registry.
+    Charge le modèle actuellement aliasé "production" dans le MLflow Registry.
 
-    Never raises: any failure (no "production" alias set, MLflow store
-    unreachable, corrupt artifact, unsupported/undetectable flavor, ...) is
-    captured in the returned ``LoadedModel.error`` instead, so the API can
-    start in degraded mode.
+    Ne lève jamais d'exception : tout échec (pas d'alias "production" défini,
+    store MLflow injoignable, artefact corrompu, flavor non supporté/non
+    détectable, ...) est capturé dans le ``LoadedModel.error`` retourné à la
+    place, afin que l'API puisse démarrer en mode dégradé.
 
-    Assumes ``mlflow.set_tracking_uri`` has already been called by the
-    entrypoint (``main.py`` at API startup, or a test fixture) — this
-    function does not set it itself, so it stays testable against a
-    throwaway store without touching global config, the same convention
-    already used by ``train.py`` / ``promote.py``.
+    Suppose que ``mlflow.set_tracking_uri`` a déjà été appelé par le point
+    d'entrée (``main.py`` au démarrage de l'API, ou une fixture de test) —
+    cette fonction ne le définit pas elle-même, ce qui la garde testable
+    contre un store jetable sans toucher à la config globale, la même
+    convention déjà utilisée par ``train.py`` / ``promote.py``.
     """
     client = mlflow.MlflowClient()
 
@@ -126,13 +129,14 @@ def load_production_model(model_name: str = MLFLOW_REGISTERED_MODEL_NAME) -> Loa
         if flavor == "sklearn":
             model = mlflow.sklearn.load_model(model_uri)
         else:
-            # Deliberately lazy, and imported under an alias rather than
-            # `import mlflow.transformers` -- a plain submodule import here
-            # would make Python treat the outer `mlflow` name as local to
-            # this whole function (shadowing the module-level `import
-            # mlflow` used a few lines above for `mlflow.MlflowClient()`),
-            # which is a real UnboundLocalError risk, not just a style
-            # nit. See module docstring for why this import is lazy at all.
+            # Volontairement paresseux (lazy), et importé sous un alias plutôt que
+            # `import mlflow.transformers` -- un simple import de sous-module ici
+            # ferait que Python traiterait le nom externe `mlflow` comme local à
+            # toute cette fonction (masquant l'import `mlflow` au niveau module
+            # utilisé quelques lignes plus haut pour `mlflow.MlflowClient()`),
+            # ce qui est un vrai risque d'UnboundLocalError, pas seulement une
+            # question de style. Voir le docstring du module pour comprendre
+            # pourquoi cet import est paresseux du tout.
             from mlflow import transformers as mlflow_transformers
 
             model = mlflow_transformers.load_model(model_uri)

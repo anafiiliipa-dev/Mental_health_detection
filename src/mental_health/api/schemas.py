@@ -1,14 +1,14 @@
 """
-Pydantic request/response models for the FastAPI service.
+Modèles Pydantic de requête/réponse pour le service FastAPI.
 
-Kept deliberately separate from ``main.py`` so the contract (what a
-client sends/receives) is readable and testable on its own, and so
-``model_loader.py`` never needs to import FastAPI at all.
+Volontairement séparés de ``main.py`` afin que le contrat (ce qu'un
+client envoie/reçoit) soit lisible et testable de façon autonome, et afin que
+``model_loader.py`` n'ait jamais besoin d'importer FastAPI.
 
-Privacy note (per the original audit): ``PredictResponse`` never echoes
-the submitted text back to the caller. The API is not a place to persist
-or reflect raw mental-health text unnecessarily — the response carries
-only the prediction.
+Note de confidentialité (selon l'audit initial) : ``PredictResponse`` ne renvoie
+jamais le texte soumis à l'appelant. L'API n'est pas un endroit où persister
+ou refléter du texte brut de santé mentale inutilement — la réponse ne porte
+que la prédiction.
 """
 from __future__ import annotations
 
@@ -16,13 +16,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from mental_health.config.paths import CLASS_LABELS
 
-# Hard cap on request text length — not a modelling choice, a basic abuse/DoS
-# guard for a public-ish HTTP endpoint. Generous for a forum-style post.
+# Plafond strict sur la longueur du texte de la requête — pas un choix de
+# modélisation, une simple protection basique contre l'abus/DoS pour un
+# endpoint HTTP quasi public. Généreux pour un post de type forum.
 MAX_TEXT_LENGTH = 10_000
 
 
 class PredictRequest(BaseModel):
-    """Body of POST /predict."""
+    """Corps de POST /predict."""
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -34,7 +35,7 @@ class PredictRequest(BaseModel):
 
 
 class PredictResponse(BaseModel):
-    """Body returned by POST /predict. Never includes the submitted text."""
+    """Corps retourné par POST /predict. N'inclut jamais le texte soumis."""
 
     label: str = Field(description="Predicted class label.")
     confidence: float = Field(ge=0.0, le=1.0, description="Confidence of the predicted label.")
@@ -47,7 +48,7 @@ class PredictResponse(BaseModel):
 
 
 class ModelInfoResponse(BaseModel):
-    """Body returned by GET /model-info."""
+    """Corps retourné par GET /model-info."""
 
     registered_model_name: str
     model_available: bool = Field(description="False when running in demo-fallback mode.")
@@ -60,10 +61,10 @@ class ModelInfoResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """Body returned by GET /health. Deliberately does not touch the model."""
+    """Corps retourné par GET /health. Ne touche volontairement pas au modèle."""
 
     status: str = "ok"
 
 
-# Exposed for reuse by main.py / tests without re-deriving the label list.
+# Exposé pour être réutilisé par main.py / les tests sans re-dériver la liste de labels.
 VALID_LABELS: list[str] = list(CLASS_LABELS)

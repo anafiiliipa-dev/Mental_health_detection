@@ -1,1 +1,1 @@
-"""Training pipeline for the Mental Health Intelligence classical ML model."""
+"""Pipeline d'entraînement pour le modèle de ML classique Mental Health Intelligence."""

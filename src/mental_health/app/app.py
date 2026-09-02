@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any
 
 # ============================================================
-# Path setup — one insertion so all src.* imports resolve
+# Configuration des chemins — un seul ajout pour que tous les
+# imports src.* se résolvent correctement
 # ============================================================
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -36,14 +37,14 @@ load_dotenv()
 
 
 # ============================================================
-# App-level constants
+# Constantes au niveau de l'application
 # ============================================================
 
 MAX_HISTORY = 8
 
 
 # ============================================================
-# Page config
+# Configuration de la page
 # ============================================================
 
 st.set_page_config(
@@ -55,7 +56,7 @@ st.set_page_config(
 
 
 # ============================================================
-# Session state
+# État de session
 # ============================================================
 
 if "history" not in st.session_state:
@@ -72,7 +73,7 @@ if "qa_chain" not in st.session_state:
 
 
 # ============================================================
-# Custom CSS
+# CSS personnalisé
 # ============================================================
 
 def load_custom_css() -> None:
@@ -279,7 +280,7 @@ def load_custom_css() -> None:
 
 
 # ============================================================
-# Utilities
+# Fonctions utilitaires
 # ============================================================
 
 def metric_card(
@@ -303,8 +304,8 @@ def render_header() -> None:
         unsafe_allow_html=True,
     )
     st.markdown(
-        '<div class="subtitle">Clinical-style NLP dashboard for mental health text analysis, '
-        'model monitoring, prediction review and deployment-ready demo.</div>',
+        '<div class="subtitle">Tableau de bord NLP de style clinique pour l\'analyse de texte en '
+        'santé mentale, le suivi des modèles, la revue des prédictions et une démonstration prête au déploiement.</div>',
         unsafe_allow_html=True,
     )
 
@@ -349,7 +350,7 @@ def load_csv_if_exists(path: Path) -> pd.DataFrame | None:
             return pd.read_csv(sample_path)
 
     except Exception as exc:
-        st.warning(f"Could not load {path.name}: {exc}")
+        st.warning(f"Impossible de charger {path.name} : {exc}")
         return None
 
     return None
@@ -366,7 +367,7 @@ def safe_get_first_value(df: pd.DataFrame | None, candidate_cols: list[str]) -> 
 
 def format_metric(value: Any | None, decimals: int = 3) -> str:
     if value is None:
-        return "N/A"
+        return "N/D"
     try:
         return f"{float(value):.{decimals}f}"
     except Exception:
@@ -418,9 +419,9 @@ def render_sample_text_buttons() -> str:
     st.markdown(
         """
         <div class="section-box">
-            <div class="section-title">Quick Test Samples</div>
+            <div class="section-title">Exemples de textes rapides</div>
             <div class="section-text">
-                Click one of the examples below to quickly test the interface.
+                Clique sur l'un des exemples ci-dessous pour tester rapidement l'interface.
             </div>
         </div>
         """,
@@ -428,15 +429,15 @@ def render_sample_text_buttons() -> str:
     )
 
     _SAMPLES = {
-        "Load Schizophrenia-like sample": (
+        "Charger un exemple type Schizophrénie": (
             "I feel like people are watching me all the time, "
             "and sometimes I hear voices even when no one is around."
         ),
-        "Load Depression-like sample": (
+        "Charger un exemple type Dépression": (
             "I have been feeling hopeless, exhausted, and empty for weeks, "
             "and I struggle to get out of bed."
         ),
-        "Load Bipolar-like sample": (
+        "Charger un exemple type Bipolarité": (
             "My thoughts are racing, I barely sleep, and I feel like I can do anything right now."
         ),
     }
@@ -455,13 +456,14 @@ def answer_with_openrouter(user_prompt: str) -> str:
     system_prompt = (
         "You are a careful assistant for a mental health NLP project dashboard. "
         "You help explain the project, metrics, model choices, deployment logic, and ethical framing. "
-        "Do not present outputs as medical diagnosis. Be concise, clear, and professional."
+        "Do not present outputs as medical diagnosis. Be concise, clear, and professional. "
+        "Always answer in French, regardless of the language of the question."
     )
     return ask_llm(prompt=user_prompt, system_prompt=system_prompt)
 
 
 # ============================================================
-# Sidebar
+# Barre latérale
 # ============================================================
 
 def build_sidebar() -> str:
@@ -470,7 +472,7 @@ def build_sidebar() -> str:
             """
             <div style="padding: 0.4rem 0 1rem 0;">
                 <div style="font-size: 1.35rem; font-weight: 800; color: #f8fafc;">Mental Health</div>
-                <div style="color: #94a3b8; font-size: 0.92rem;">NLP Clinical Dashboard</div>
+                <div style="color: #94a3b8; font-size: 0.92rem;">Tableau de bord clinique NLP</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -478,7 +480,7 @@ def build_sidebar() -> str:
 
         selected = option_menu(
             menu_title=None,
-            options=["Overview", "Predictions", "Monitoring", "Chat", "History", "About"],
+            options=["Vue d'ensemble", "Prédictions", "Suivi", "Discussion", "Historique", "À propos"],
             icons=[
                 "grid-fill", "activity", "bar-chart-line-fill",
                 "chat-dots-fill", "clock-history", "info-circle-fill",
@@ -505,15 +507,15 @@ def build_sidebar() -> str:
         )
 
         st.markdown("---")
-        st.markdown("**System Status**")
-        st.caption("Dashboard shell ready")
-        st.caption("Prediction pipeline ready")
-        st.caption("Demo mode fallback enabled")
-        st.caption(f"OpenRouter model: {get_default_model()}")
+        st.markdown("**État du système**")
+        st.caption("Interface du tableau de bord prête")
+        st.caption("Pipeline de prédiction prêt")
+        st.caption("Mode démo de secours activé")
+        st.caption(f"Modèle OpenRouter : {get_default_model()}")
 
-        if st.button("Clear prediction history", use_container_width=True):
+        if st.button("Effacer l'historique des prédictions", use_container_width=True):
             st.session_state.history = []
-            st.success("History cleared.")
+            st.success("Historique effacé.")
 
     return selected
 
@@ -527,7 +529,7 @@ def render_overview() -> None:
     dataset_info = load_dataset_info()
     artifacts = load_monitoring_artifacts()
 
-    total_texts = dataset_info["total_texts"] if dataset_info["total_texts"] is not None else "N/A"
+    total_texts = dataset_info["total_texts"] if dataset_info["total_texts"] is not None else "N/D"
     classes = dataset_info["num_classes"]
 
     final_test_df = artifacts["final_test_df"]
@@ -537,10 +539,11 @@ def render_overview() -> None:
     st.markdown(
         """
         <div class="hero-box">
-            <div class="hero-title">Early Mental Health Risk Screening from Text</div>
+            <div class="hero-title">Dépistage précoce des risques en santé mentale à partir de texte</div>
             <div class="hero-text">
-                A premium dashboard for mental health NLP classification, designed to showcase
-                model predictions, deployment readiness, monitoring logic and clinically-inspired review workflows.
+                Un tableau de bord premium pour la classification NLP en santé mentale, conçu pour présenter
+                les prédictions du modèle, la préparation au déploiement, la logique de suivi et des flux de
+                revue inspirés du monde clinique.
             </div>
         </div>
         """,
@@ -549,20 +552,20 @@ def render_overview() -> None:
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.markdown(metric_card("Total Texts", str(total_texts), "Dataset status", "accent-cyan"), unsafe_allow_html=True)
+        st.markdown(metric_card("Textes totaux", str(total_texts), "État du jeu de données", "accent-cyan"), unsafe_allow_html=True)
     with c2:
-        st.markdown(metric_card("Classes", str(classes), "Multi-class NLP", "accent-purple"), unsafe_allow_html=True)
+        st.markdown(metric_card("Classes", str(classes), "NLP multi-classes", "accent-purple"), unsafe_allow_html=True)
     with c3:
         st.markdown(
-            metric_card("Critical Recall", format_metric(critical_recall), "Loaded from final test metrics", "accent-green"),
+            metric_card("Rappel critique", format_metric(critical_recall), "Chargé depuis les métriques de test final", "accent-green"),
             unsafe_allow_html=True,
         )
     with c4:
         st.markdown(
             metric_card(
-                "Champion Model",
-                str(champion_model) if champion_model is not None else "N/A",
-                "Loaded from artifacts",
+                "Modèle champion",
+                str(champion_model) if champion_model is not None else "N/D",
+                "Chargé depuis les artefacts",
                 "accent-gold",
             ),
             unsafe_allow_html=True,
@@ -574,7 +577,7 @@ def render_overview() -> None:
     st.markdown(
         f"""
         <div class="section-box">
-            <div class="section-title">Detected Clinical Categories</div>
+            <div class="section-title">Catégories cliniques détectées</div>
             <div class="section-text">{class_badges}</div>
         </div>
         """,
@@ -582,18 +585,19 @@ def render_overview() -> None:
     )
 
     dataset_message = (
-        f"Connected to dataset: {dataset_info['dataset_path']}"
+        f"Connecté au jeu de données : {dataset_info['dataset_path']}"
         if dataset_info["dataset_loaded"]
-        else "Dataset file not found. The app still works in presentation mode."
+        else "Fichier de données introuvable. L'application fonctionne quand même en mode présentation."
     )
     st.markdown(
         f"""
         <div class="section-box">
-            <div class="section-title">Project Overview</div>
+            <div class="section-title">Aperçu du projet</div>
             <div class="section-text">
                 {escape(dataset_message)}<br><br>
-                This dashboard supports prediction workflows, model loading, probability inspection,
-                monitoring panels, session history, and deployment demonstration.
+                Ce tableau de bord prend en charge les flux de prédiction, le chargement de modèles,
+                l'inspection des probabilités, les panneaux de suivi, l'historique de session et une
+                démonstration de déploiement.
             </div>
         </div>
         """,
@@ -613,10 +617,10 @@ def render_predictions() -> None:
         st.markdown(
             """
             <div class="section-box">
-                <div class="section-title">Text Classification</div>
+                <div class="section-title">Classification de texte</div>
                 <div class="section-text">
-                    Paste a text sample, choose a model, and run a prediction.
-                    If a local model file is not available, the app switches automatically to demo mode.
+                    Colle un exemple de texte, choisis un modèle, et lance une prédiction.
+                    Si aucun fichier de modèle local n'est disponible, l'application bascule automatiquement en mode démo.
                 </div>
             </div>
             """,
@@ -624,28 +628,29 @@ def render_predictions() -> None:
         )
 
         user_text = st.text_area(
-            "Enter text to analyse",
+            "Saisis le texte à analyser",
             value=default_text,
             height=220,
-            placeholder="Write or paste text here...",
+            placeholder="Écris ou colle un texte ici...",
         )
 
         selected_model = st.selectbox(
-            "Select model",
+            "Sélectionner un modèle",
             list(MODEL_CANDIDATES.keys()),
             index=0,
         )
 
-        analyse_clicked = st.button("Analyse Text", type="primary", use_container_width=True)
+        analyse_clicked = st.button("Analyser le texte", type="primary", use_container_width=True)
 
     with right_col:
         st.markdown(
             """
             <div class="section-box">
-                <div class="section-title">Prediction Tips</div>
+                <div class="section-title">Conseils pour la prédiction</div>
                 <div class="section-text">
-                    Use natural language examples similar to user posts or patient-style narratives.
-                    Classical models are loaded first. Transformer slots are prepared for future integration.
+                    Utilise des exemples en langage naturel, semblables à des publications d'utilisateurs
+                    ou des récits de type patient. Les modèles classiques sont chargés en premier. Les
+                    emplacements pour les transformeurs sont prêts pour une future intégration.
                 </div>
             </div>
             """,
@@ -654,10 +659,10 @@ def render_predictions() -> None:
 
     if analyse_clicked:
         if not user_text.strip():
-            st.warning("Please enter some text before analysing.")
+            st.warning("Merci de saisir un texte avant de lancer l'analyse.")
             return
 
-        with st.spinner("Running prediction..."):
+        with st.spinner("Prédiction en cours..."):
             model, model_path, load_error = load_joblib_model(selected_model)
 
             if model is not None:
@@ -665,7 +670,7 @@ def render_predictions() -> None:
                     predicted_label, confidence, prob_df = predict_with_model(model, user_text)
                     mode = "real"
                 except Exception as exc:
-                    st.error(f"Prediction failed with the loaded model: {exc}")
+                    st.error(f"La prédiction a échoué avec le modèle chargé : {exc}")
                     predicted_label, confidence, prob_df = fallback_demo_prediction(user_text)
                     mode = "demo-fallback"
             else:
@@ -692,20 +697,20 @@ def render_predictions() -> None:
         result_col, details_col = st.columns([1, 1])
 
         with result_col:
-            confidence_text = f"{confidence * 100:.2f}%" if confidence is not None else "N/A"
-            mode_label = "Real model" if mode == "real" else "Demo mode"
+            confidence_text = f"{confidence * 100:.2f}%" if confidence is not None else "N/D"
+            mode_label = "Modèle réel" if mode == "real" else "Mode démo"
 
             st.markdown(
                 f"""
                 <div class="result-box">
-                    <div class="result-label">Prediction Result</div>
+                    <div class="result-label">Résultat de la prédiction</div>
                     <div class="result-value">{escape(predicted_label)}</div>
-                    <div class="result-label">Confidence</div>
+                    <div class="result-label">Confiance</div>
                     <div style="font-size: 1.25rem; font-weight: 700; color: #22d3ee; margin-bottom: 0.9rem;">{escape(confidence_text)}</div>
                     <div class="divider-line"></div>
-                    <div class="result-label">Selected Model</div>
+                    <div class="result-label">Modèle sélectionné</div>
                     <div style="color: #f8fafc; font-weight: 700; margin-bottom: 0.6rem;">{escape(selected_model)}</div>
-                    <div class="result-label">Execution Mode</div>
+                    <div class="result-label">Mode d'exécution</div>
                     <div style="color: #cbd5e1; font-weight: 600;">{escape(mode_label)}</div>
                 </div>
                 """,
@@ -715,13 +720,13 @@ def render_predictions() -> None:
             if load_error:
                 st.info(load_error)
             if model_path:
-                st.caption(f"Loaded from: {model_path}")
+                st.caption(f"Chargé depuis : {model_path}")
 
         with details_col:
             st.markdown(
                 """
                 <div class="section-box">
-                    <div class="section-title">Class Probabilities</div>
+                    <div class="section-title">Probabilités par classe</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -731,7 +736,7 @@ def render_predictions() -> None:
         st.markdown(
             """
             <div class="section-box">
-                <div class="section-title">Submitted Text</div>
+                <div class="section-title">Texte soumis</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -755,8 +760,8 @@ def render_monitoring() -> None:
 
     if using_sample_outputs:
         st.info(
-            "Displaying safe sample evaluation outputs from docs/sample_outputs/. "
-            "Run the notebooks to generate full local artifacts in reports/tables/."
+            "Affichage d'exemples de résultats d'évaluation depuis docs/sample_outputs/. "
+            "Exécute les notebooks pour générer les artefacts locaux complets dans reports/tables/."
         )
 
     final_test_df    = artifacts["final_test_df"]
@@ -771,17 +776,17 @@ def render_monitoring() -> None:
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.markdown(metric_card("Macro F1", format_metric(macro_f1), "Final test metric", "accent-cyan"), unsafe_allow_html=True)
+        st.markdown(metric_card("Macro F1", format_metric(macro_f1), "Métrique de test final", "accent-cyan"), unsafe_allow_html=True)
     with c2:
-        st.markdown(metric_card("Macro Recall", format_metric(macro_recall), "Final test metric", "accent-green"), unsafe_allow_html=True)
+        st.markdown(metric_card("Rappel macro", format_metric(macro_recall), "Métrique de test final", "accent-green"), unsafe_allow_html=True)
     with c3:
-        st.markdown(metric_card("Critical Recall", format_metric(critical_recall), "Priority classes", "accent-gold"), unsafe_allow_html=True)
+        st.markdown(metric_card("Rappel critique", format_metric(critical_recall), "Classes prioritaires", "accent-gold"), unsafe_allow_html=True)
     with c4:
         st.markdown(
             metric_card(
-                "Champion Model",
-                str(champion_model) if champion_model is not None else "N/A",
-                "Loaded from artifacts",
+                "Modèle champion",
+                str(champion_model) if champion_model is not None else "N/D",
+                "Chargé depuis les artefacts",
                 "accent-purple",
             ),
             unsafe_allow_html=True,
@@ -790,38 +795,38 @@ def render_monitoring() -> None:
     st.markdown(
         """
         <div class="section-box">
-            <div class="section-title">Monitoring Panel</div>
+            <div class="section-title">Panneau de suivi</div>
             <div class="section-text">
-                Displays real evaluation artifacts when CSV files are present in the project folders.
+                Affiche les artefacts d'évaluation réels lorsque les fichiers CSV sont présents dans les dossiers du projet.
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown("### Final Test Metrics")
+    st.markdown("### Métriques de test final")
     if final_test_df is not None:
         st.dataframe(final_test_df, use_container_width=True, hide_index=True)
     else:
-        st.warning(f"Missing file: {FINAL_TEST_METRICS_PATH}")
+        st.warning(f"Fichier manquant : {FINAL_TEST_METRICS_PATH}")
 
-    st.markdown("### Nested CV Summary")
+    st.markdown("### Résumé de la CV imbriquée")
     if nested_cv_df is not None:
         st.dataframe(nested_cv_df, use_container_width=True, hide_index=True)
     else:
-        st.warning(f"Missing file: {NESTED_CV_SUMMARY_PATH}")
+        st.warning(f"Fichier manquant : {NESTED_CV_SUMMARY_PATH}")
 
-    st.markdown("### Normal CV Summary")
+    st.markdown("### Résumé de la CV normale")
     if normal_cv_df is not None:
         st.dataframe(normal_cv_df, use_container_width=True, hide_index=True)
     else:
-        st.warning(f"Missing file: {NORMAL_CV_SUMMARY_PATH}")
+        st.warning(f"Fichier manquant : {NORMAL_CV_SUMMARY_PATH}")
 
-    st.markdown("### Global Clinical Review")
+    st.markdown("### Revue clinique globale")
     if global_review_df is not None:
         st.dataframe(global_review_df, use_container_width=True, hide_index=True)
     else:
-        st.warning(f"Missing file: {GLOBAL_CLINICAL_REVIEW_PATH}")
+        st.warning(f"Fichier manquant : {GLOBAL_CLINICAL_REVIEW_PATH}")
 
 
 def render_chat() -> None:
@@ -830,33 +835,33 @@ def render_chat() -> None:
     st.markdown(
         """
         <div class="section-box">
-            <div class="section-title">Project Copilot</div>
+            <div class="section-title">Copilote du projet</div>
             <div class="section-text">
-                Ask questions about the project, its purpose, triage logic, business value,
-                metrics, development approach, or deployment setup.
+                Pose des questions sur le projet, son objectif, la logique de triage, la valeur métier,
+                les métriques, l'approche de développement ou la configuration de déploiement.
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    st.caption(f"LLM model configured: {get_default_model()}")
+    st.caption(f"Modèle LLM configuré : {get_default_model()}")
 
     if st.session_state.qa_chain is None:
-        with st.spinner("Loading knowledge base..."):
+        with st.spinner("Chargement de la base de connaissances..."):
             try:
                 st.session_state.qa_chain = build_qa_chain()
             except Exception:
                 st.session_state.qa_chain = None
 
-    if st.button("Clear chat", use_container_width=False):
+    if st.button("Effacer la discussion", use_container_width=False):
         st.session_state.chat_messages = []
-        st.success("Chat cleared.")
+        st.success("Discussion effacée.")
 
     for message in st.session_state.chat_messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    user_prompt = st.chat_input("Ask something about your project...")
+    user_prompt = st.chat_input("Pose une question sur ton projet...")
 
     if user_prompt:
         st.session_state.chat_messages.append({"role": "user", "content": user_prompt})
@@ -864,7 +869,7 @@ def render_chat() -> None:
             st.markdown(user_prompt)
 
         with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
+            with st.spinner("Réflexion en cours..."):
                 answer = ""
 
                 if st.session_state.qa_chain is not None:
@@ -877,18 +882,18 @@ def render_chat() -> None:
                             names = [Path(d.metadata.get("source", "")).name for d in source_docs if d.metadata.get("source")]
                             unique_names = list(dict.fromkeys(names))
                             if unique_names:
-                                answer += "\n\n**Sources:** " + ", ".join(unique_names)
+                                answer += "\n\n**Sources :** " + ", ".join(unique_names)
                     except Exception as exc:
-                        answer = f"RAG pipeline failed: {exc}\n\nFalling back to OpenRouter...\n\n"
+                        answer = f"Le pipeline RAG a échoué : {exc}\n\nBascule vers OpenRouter...\n\n"
 
                 if not answer:
                     try:
                         answer = answer_with_openrouter(user_prompt)
                     except Exception as exc:
                         answer = (
-                            "Could not answer with either the RAG assistant or OpenRouter.\n\n"
-                            f"OpenRouter error: {exc}\n\n"
-                            "Check your .env file and OPENROUTER_API_KEY."
+                            "Impossible de répondre, ni avec l'assistant RAG ni avec OpenRouter.\n\n"
+                            f"Erreur OpenRouter : {exc}\n\n"
+                            "Vérifie ton fichier .env et OPENROUTER_API_KEY."
                         )
 
                 st.markdown(answer)
@@ -902,9 +907,9 @@ def render_history() -> None:
     st.markdown(
         """
         <div class="section-box">
-            <div class="section-title">Prediction History</div>
+            <div class="section-title">Historique des prédictions</div>
             <div class="section-text">
-                Stores the most recent predictions from the current session only.
+                Stocke uniquement les prédictions les plus récentes de la session en cours.
             </div>
         </div>
         """,
@@ -912,21 +917,21 @@ def render_history() -> None:
     )
 
     if not st.session_state.history:
-        st.info("No predictions yet in this session.")
+        st.info("Aucune prédiction pour l'instant dans cette session.")
         return
 
     for item in st.session_state.history:
         confidence_text = (
             f"{item['confidence'] * 100:.2f}%"
             if item["confidence"] is not None
-            else "N/A"
+            else "N/D"
         )
         st.markdown(
             f"""
             <div class="history-card">
                 <div class="history-title">{escape(str(item['label']))}</div>
                 <div class="history-meta">
-                    Model: {escape(str(item['model']))} | Confidence: {escape(confidence_text)} | Mode: {escape(str(item['mode']))}
+                    Modèle : {escape(str(item['model']))} | Confiance : {escape(confidence_text)} | Mode : {escape(str(item['mode']))}
                 </div>
                 <div class="history-text">{escape(str(item['text']))}</div>
             </div>
@@ -941,14 +946,15 @@ def render_about() -> None:
     st.markdown(
         """
         <div class="section-box">
-            <div class="section-title">About This Dashboard</div>
+            <div class="section-title">À propos de ce tableau de bord</div>
             <div class="section-text">
-                This Streamlit application is a professional showcase interface for a mental health
-                NLP classification project. It combines premium visual design with practical deployment logic:
-                model loading, text prediction, confidence display, monitoring artifacts and session history.
+                Cette application Streamlit est une interface de démonstration professionnelle pour un projet
+                de classification NLP en santé mentale. Elle combine un design visuel soigné avec une logique
+                de déploiement concrète : chargement de modèle, prédiction de texte, affichage de la confiance,
+                artefacts de suivi et historique de session.
                 <br><br>
-                It is intended for demonstration, portfolio and MVP presentation purposes.
-                <strong>It is not a diagnostic device.</strong>
+                Elle est destinée à des fins de démonstration, de portfolio et de présentation MVP.
+                <strong>Ce n'est pas un dispositif de diagnostic.</strong>
             </div>
         </div>
         """,
@@ -958,13 +964,13 @@ def render_about() -> None:
     st.markdown(
         """
         <div class="section-box">
-            <div class="section-title">Recommended Next Steps</div>
+            <div class="section-title">Prochaines étapes recommandées</div>
             <div class="section-text">
-                1. Connect your real saved classical model (.joblib in models/).<br>
-                2. Add transformer inference endpoints or transformer pipelines.<br>
-                3. Show top-k classes and richer explanation panels.<br>
-                4. Add charts from real evaluation CSV files.<br>
-                5. Deploy on Streamlit Community Cloud or another platform.
+                1. Connecter ton vrai modèle classique sauvegardé (.joblib dans models/).<br>
+                2. Ajouter des points de terminaison d'inférence transformeurs ou des pipelines transformeurs.<br>
+                3. Afficher les top-k classes et des panneaux d'explication plus riches.<br>
+                4. Ajouter des graphiques à partir des vrais fichiers CSV d'évaluation.<br>
+                5. Déployer sur Streamlit Community Cloud ou une autre plateforme.
             </div>
         </div>
         """,
@@ -973,7 +979,7 @@ def render_about() -> None:
 
 
 # ============================================================
-# Main
+# Point d'entrée principal
 # ============================================================
 
 def main() -> None:
@@ -981,12 +987,12 @@ def main() -> None:
     page = build_sidebar()
 
     dispatch = {
-        "Overview":    render_overview,
-        "Predictions": render_predictions,
-        "Monitoring":  render_monitoring,
-        "Chat":        render_chat,
-        "History":     render_history,
-        "About":       render_about,
+        "Vue d'ensemble": render_overview,
+        "Prédictions":    render_predictions,
+        "Suivi":          render_monitoring,
+        "Discussion":     render_chat,
+        "Historique":     render_history,
+        "À propos":       render_about,
     }
 
     renderer = dispatch.get(page)

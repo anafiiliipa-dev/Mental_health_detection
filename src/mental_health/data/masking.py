@@ -1,17 +1,19 @@
 """
-Diagnostic/medication term masking — produces the ``body_masked`` column.
+Masquage des termes de diagnostic/médication — produit la colonne ``body_masked``.
 
-Ported from ``notebooks/01_data_cleaning.ipynb`` (leakage audit section).
-The rationale: a model that can just read the diagnosis or medication name
-out of the text ("I take Lithium for my Bipolar") isn't learning a real
-linguistic signal, it's reading the answer. Masking these terms with a
-neutral placeholder gives a text variant that measures whether the model
-still performs well without that shortcut — used as a robustness check
-alongside the raw text (see ``mental_health.train.champion`` for how the
-"raw" vs "masked" comparison feeds into champion selection).
+Porté depuis ``notebooks/01_data_cleaning.ipynb`` (section d'audit des fuites).
+Le raisonnement : un modèle qui peut simplement lire le diagnostic ou le nom
+du médicament dans le texte ("I take Lithium for my Bipolar") n'apprend pas
+un vrai signal linguistique, il lit la réponse. Masquer ces termes avec un
+placeholder neutre donne une variante de texte qui mesure si le modèle
+performe toujours bien sans ce raccourci — utilisé comme test de robustesse
+en complément du texte brut (voir ``mental_health.train.champion`` pour la
+façon dont la comparaison "raw" vs "masked" alimente la sélection du
+champion).
 
-No behavioural change from the notebook — the term lists and regex logic
-are ported as-is, only reorganised into pure, testable functions.
+Aucun changement de comportement par rapport au notebook — les listes de
+termes et la logique regex sont portées telles quelles, seulement
+réorganisées en fonctions pures et testables.
 """
 from __future__ import annotations
 
@@ -36,17 +38,17 @@ DIAGNOSTIC_TERMS: list[str] = [
 
 FULL_LEAK_LIST: list[str] = DIAGNOSTIC_TERMS + MEDICATION_TERMS
 
-# "add" is excluded from the masking list specifically (kept in
-# FULL_LEAK_LIST above only for the leakage *audit*, not for masking):
-# it's a common English word ("add up", "in addition") and masking every
-# occurrence would destroy unrelated, legitimate text.
+# "add" est spécifiquement exclu de la liste de masquage (conservé dans
+# FULL_LEAK_LIST ci-dessus uniquement pour l'*audit* des fuites, pas pour le masquage) :
+# c'est un mot anglais courant ("add up", "in addition") et masquer chaque
+# occurrence détruirait du texte légitime sans rapport.
 MASKING_LEAK_LIST: list[str] = [term for term in FULL_LEAK_LIST if term.lower() != "add"]
 
 MASK_TOKEN = "[CONDITION]"
 
 
 def build_leakage_pattern(term_list: list[str]) -> str:
-    """Build a whole-word, case-insensitive alternation regex for the given terms."""
+    """Construit une regex d'alternation insensible à la casse, sur mots entiers, pour les termes donnés."""
     escaped_terms = [re.escape(term) for term in term_list]
     return rf"(?<!\w)({'|'.join(escaped_terms)})(?!\w)"
 
@@ -55,14 +57,14 @@ LEAKAGE_PATTERN = build_leakage_pattern(MASKING_LEAK_LIST)
 
 
 def mask_leakage_terms(text: str | float | None) -> str | None:
-    """Replace every diagnostic/medication term in ``text`` with ``[CONDITION]``."""
+    """Remplace chaque terme de diagnostic/médication dans ``text`` par ``[CONDITION]``."""
     if pd.isna(text):
         return None
     return re.sub(LEAKAGE_PATTERN, MASK_TOKEN, str(text), flags=re.IGNORECASE)
 
 
 def add_masked_column(df: pd.DataFrame, text_col: str = "body", masked_col: str = "body_masked") -> pd.DataFrame:
-    """Add ``masked_col`` to ``df`` by masking diagnostic/medication terms in ``text_col``."""
+    """Ajoute ``masked_col`` à ``df`` en masquant les termes de diagnostic/médication dans ``text_col``."""
     df = df.copy()
     df[masked_col] = df[text_col].apply(mask_leakage_terms)
     return df

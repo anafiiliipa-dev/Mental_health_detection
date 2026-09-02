@@ -1,25 +1,25 @@
 """
-FastAPI service (Phase 6): serves the "production"-aliased MLflow model
-over HTTP.
+Service FastAPI (Phase 6) : sert le modèle MLflow avec l'alias "production"
+via HTTP.
 
 Endpoints
 ---------
-GET  /health       liveness only — never touches the model or MLflow.
-GET  /model-info    which model version is serving, its metrics, or why
-                    none is available.
-POST /predict       classify a piece of text.
+GET  /health       liveness uniquement — ne touche jamais au modèle ni à MLflow.
+GET  /model-info    quelle version de modèle est servie, ses métriques, ou pourquoi
+                    aucune n'est disponible.
+POST /predict       classifie un texte.
 
-Degraded mode (confirmed with the project owner before writing this):
-if no model is aliased "production" in the Registry, the API still
-starts and /predict answers with a clearly-labelled heuristic fallback
-(`fallback.py`, `is_demo_fallback=True`) instead of failing hard — this
-mirrors the graceful-degradation pattern already used elsewhere in the
-project (`mental_health.models.services`).
+Mode dégradé (confirmé avec le propriétaire du projet avant d'écrire ce code) :
+si aucun modèle n'a l'alias "production" dans le Registry, l'API démarre
+quand même et /predict répond avec un fallback heuristique clairement
+étiqueté (`fallback.py`, `is_demo_fallback=True`) plutôt que d'échouer
+brutalement — cela reprend le pattern de dégradation gracieuse déjà utilisé
+ailleurs dans le projet (`mental_health.models.services`).
 
-Privacy (per the original audit): the raw request text is never logged.
-Only a one-way hash + length are logged per /predict call, and the
-response never echoes the submitted text back (enforced structurally —
-see `schemas.PredictResponse`, which has no text field at all).
+Confidentialité (selon l'audit initial) : le texte brut de la requête n'est jamais
+loggé. Seuls un hash à sens unique et sa longueur sont loggés par appel /predict, et
+la réponse ne renvoie jamais le texte soumis (imposé structurellement —
+voir `schemas.PredictResponse`, qui n'a aucun champ texte).
 """
 from __future__ import annotations
 
@@ -34,11 +34,11 @@ import numpy as np
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
-# Must run before the mlflow_config import below reads MLFLOW_TRACKING_URI /
-# MLFLOW_ARTIFACT_ROOT from the environment (e.g. a shared team backend
-# instead of the local SQLite default) — see mlflow_config.py's docstring.
-# A no-op in Docker/Cloud Run, where these are set directly as container
-# env vars and there is no .env file to find.
+# Doit s'exécuter avant que l'import mlflow_config ci-dessous ne lise MLFLOW_TRACKING_URI /
+# MLFLOW_ARTIFACT_ROOT depuis l'environnement (par ex. un backend d'équipe partagé
+# au lieu du SQLite local par défaut) — voir le docstring de mlflow_config.py.
+# Un no-op sous Docker/Cloud Run, où ces variables sont définies directement comme
+# variables d'environnement du conteneur et où il n'y a pas de fichier .env à trouver.
 load_dotenv()
 
 from mental_health.api.fallback import fallback_demo_prediction  # noqa: E402
@@ -58,8 +58,8 @@ from mental_health.config.mlflow_config import (  # noqa: E402
 configure_logging()
 logger = logging.getLogger(__name__)
 
-# Loaded once at startup (see `lifespan`), not per-request — re-loading the
-# model on every call would be needless latency and MLflow Registry load.
+# Chargé une seule fois au démarrage (voir `lifespan`), pas à chaque requête — recharger
+# le modèle à chaque appel serait une latence inutile et une charge inutile sur le MLflow Registry.
 _STATE: dict[str, LoadedModel] = {}
 
 
@@ -87,7 +87,7 @@ app = FastAPI(
 
 
 def _text_fingerprint(text: str) -> str:
-    """Non-reversible fingerprint for logs — never the raw text itself."""
+    """Empreinte non réversible pour les logs — jamais le texte brut lui-même."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
 
 
@@ -102,9 +102,9 @@ def _predict_with_sklearn_model(model, text: str) -> PredictResponse:
         probabilities = dict(zip((str(c) for c in model.classes_), (float(p) for p in proba), strict=True))
         confidence = float(max(proba))
     elif hasattr(model, "decision_function"):
-        # The current champion (LinearSVC) has no predict_proba. Approximate a
-        # confidence score with a softmax over its decision_function — informative,
-        # not a calibrated probability.
+        # Le champion actuel (LinearSVC) n'a pas de predict_proba. On approxime un
+        # score de confiance avec un softmax sur son decision_function — informatif,
+        # mais pas une probabilité calibrée.
         scores = model.decision_function([text])[0]
         exp_scores = np.exp(scores - np.max(scores))
         proba = exp_scores / exp_scores.sum()
@@ -118,32 +118,33 @@ def _predict_with_sklearn_model(model, text: str) -> PredictResponse:
 
 def _predict_with_transformers_model(pipeline, text: str) -> PredictResponse:
     """
-    ``pipeline`` is a HF ``text-classification`` pipeline (see
-    ``register_distilbert.py``) with real label strings (not "LABEL_0")
-    because the fine-tuned model's config carries the ``id2label`` mapping
-    baked in at training time (``distilbert_finetune.py``).
+    ``pipeline`` est un pipeline HF ``text-classification`` (voir
+    ``register_distilbert.py``) avec de vraies chaînes de labels (pas "LABEL_0")
+    car la config du modèle fine-tuné embarque le mapping ``id2label``
+    figé au moment de l'entraînement (``distilbert_finetune.py``).
 
-    ``top_k=None`` is passed explicitly on every call, NOT relied upon as
-    the pipeline's baked-in default: a pipeline built with ``top_k=None``
-    and then round-tripped through ``mlflow.transformers.log_model`` /
-    ``load_model`` does not necessarily keep that setting (observed in
-    practice — the reloaded pipeline silently fell back to ``top_k=1``,
-    returning one ``{"label", "score"}`` dict per input instead of a list
-    covering every class, which crashed the dict comprehension below with
-    a confusing "string indices must be integers" — iterating a dict
-    yields its string keys). Passing ``top_k=None`` here every time is
-    what actually determines the output shape, regardless of what MLflow
-    preserved from registration.
+    ``top_k=None`` est passé explicitement à chaque appel, SANS compter sur
+    le réglage par défaut figé dans le pipeline : un pipeline construit avec
+    ``top_k=None`` puis passé par un aller-retour via ``mlflow.transformers.log_model`` /
+    ``load_model`` ne conserve pas nécessairement ce réglage (observé en
+    pratique — le pipeline rechargé retombait silencieusement sur ``top_k=1``,
+    renvoyant un seul dict ``{"label", "score"}`` par entrée au lieu d'une liste
+    couvrant chaque classe, ce qui faisait planter la compréhension de dict
+    ci-dessous avec un message confus "string indices must be integers" —
+    itérer sur un dict renvoie ses clés sous forme de chaînes). Passer
+    ``top_k=None`` ici à chaque fois est ce qui détermine réellement la forme
+    de la sortie, indépendamment de ce que MLflow a conservé lors de l'enregistrement.
 
-    ``truncation=True`` is passed for the same reason: the pipeline was
-    never built with a truncation setting (see ``register_distilbert.py``),
-    so a request text longer than the model's 512-token limit crashes with
-    a raw ``RuntimeError`` from inside PyTorch's position-embedding
-    addition instead of failing gracefully — first observed when the
-    monitoring job (``drift_check.py``) scored real, longer training
-    texts. Truncating to the model's max length is the standard way to
-    handle this in a triage tool, where cutting off the tail of an
-    overlong submission is an acceptable trade-off against a hard 500.
+    ``truncation=True`` est passé pour la même raison : le pipeline n'a jamais
+    été construit avec un réglage de troncature (voir ``register_distilbert.py``),
+    donc un texte de requête plus long que la limite de 512 tokens du modèle
+    plante avec une ``RuntimeError`` brute venant de l'addition des
+    position-embeddings dans PyTorch, au lieu d'échouer proprement — observé
+    pour la première fois lorsque le job de monitoring (``drift_check.py``) a
+    scoré des textes d'entraînement réels, plus longs. Tronquer à la longueur
+    maximale du modèle est la façon standard de gérer ceci dans un outil de
+    triage, où couper la fin d'une soumission trop longue est un compromis
+    acceptable face à une erreur 500 brutale.
     """
     scores = pipeline([text], top_k=None, truncation=True)[0]
     probabilities = {item["label"]: float(item["score"]) for item in scores}
@@ -155,8 +156,8 @@ def _predict_with_transformers_model(pipeline, text: str) -> PredictResponse:
 
 
 def _predict_with_real_model(loaded: LoadedModel, text: str) -> PredictResponse:
-    """Dispatch on the loaded model's flavor (see model_loader.py) — the
-    two shapes of "real model" this API can currently serve."""
+    """Dispatche selon le flavor du modèle chargé (voir model_loader.py) — les
+    deux formes de "vrai modèle" que cette API peut actuellement servir."""
     if loaded.flavor == "transformers":
         return _predict_with_transformers_model(loaded.model, text)
     return _predict_with_sklearn_model(loaded.model, text)
@@ -193,16 +194,17 @@ def predict(request: PredictRequest) -> PredictResponse:
 
     latency_ms = round((time.perf_counter() - started) * 1000, 2)
 
-    # Never log request.text — a hash + length is enough to debug volume/traffic
-    # without ever persisting raw mental-health text in application logs.
+    # Ne jamais logger request.text — un hash + une longueur suffisent pour déboguer
+    # le volume/trafic sans jamais persister de texte brut de santé mentale dans les logs
+    # applicatifs.
     #
-    # probabilities IS included (unlike the text): it never reveals
-    # anything about the submitted text beyond what predicted_label
-    # already does (the predicted class), and having the full per-class
-    # distribution in the log -- not just the top label -- is useful for
-    # spotting low-confidence predictions and, later, feeding the
-    # Evidently monitoring/drift checks (mental_health.monitoring) without
-    # needing to re-run inference.
+    # probabilities EST inclus (contrairement au texte) : cela ne révèle
+    # jamais rien sur le texte soumis au-delà de ce que predicted_label
+    # révèle déjà (la classe prédite), et avoir la distribution complète
+    # par classe dans le log — pas seulement le label le plus probable — est
+    # utile pour repérer les prédictions à faible confiance et, plus tard,
+    # alimenter les vérifications de monitoring/drift Evidently
+    # (mental_health.monitoring) sans avoir besoin de relancer l'inférence.
     logger.info(
         "predict request",
         extra={

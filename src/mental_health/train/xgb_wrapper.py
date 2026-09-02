@@ -1,23 +1,23 @@
 """
-Thin sklearn-compatible wrapper around ``xgboost.XGBClassifier`` (Phase 11:
-publishing XGBoost/LightGBM results on TF-IDF alongside the classical
-linear registry).
+Wrapper léger et compatible sklearn autour de ``xgboost.XGBClassifier`` (Phase 11 :
+publication des résultats XGBoost/LightGBM sur TF-IDF aux côtés du
+registre linéaire classique).
 
-Why this exists: xgboost>=2's sklearn API requires integer-encoded targets
-(0..K-1) and raises on raw string class labels -- unlike every other
-classifier in ``model_registry.py`` (LinearSVC, LogisticRegression,
-MultinomialNB, and LightGBM's own sklearn API), which all accept the
-project's string labels directly. This wrapper label-encodes at fit time
-and decodes predictions back to the original strings, so XGBoost drops
-into the existing pipelines/benchmark/champion code exactly like every
-other candidate -- nothing in benchmark.py, champion.py or train.py needs
-to know XGBoost is different.
+Pourquoi cela existe : l'API sklearn de xgboost>=2 nécessite des cibles encodées en
+entiers (0..K-1) et lève une exception sur des labels de classe en chaîne brute -- contrairement à
+tout autre classifieur dans ``model_registry.py`` (LinearSVC, LogisticRegression,
+MultinomialNB, et l'API sklearn propre à LightGBM), qui acceptent tous
+directement les labels en chaîne du projet. Ce wrapper encode les labels au moment du
+fit et décode les prédictions vers les chaînes d'origine, afin que XGBoost s'insère
+dans les pipelines/benchmark/champion existants exactement comme tout
+autre candidat -- rien dans benchmark.py, champion.py ou train.py n'a besoin
+de savoir que XGBoost est différent.
 
-Also translates this project's existing per-class weight dict convention
-(``model_registry.compute_boosted_class_weights``, the same one LinearSVC/
-LogisticRegression already take as ``class_weight=``) into XGBoost's
-``sample_weight`` fit argument, since ``XGBClassifier`` has no
-``class_weight`` parameter of its own.
+Traduit aussi la convention existante de ce projet pour le dict de poids par
+classe (``model_registry.compute_boosted_class_weights``, le même que LinearSVC/
+LogisticRegression prennent déjà comme ``class_weight=``) vers l'argument
+``sample_weight`` de fit de XGBoost, puisque ``XGBClassifier`` n'a pas de
+paramètre ``class_weight`` propre.
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from xgboost import XGBClassifier
 
 
 class XGBTextClassifier(BaseEstimator, ClassifierMixin):
-    """XGBClassifier that accepts string labels and an optional per-class weight dict, like the rest of the registry."""
+    """XGBClassifier qui accepte des labels en chaîne et un dict optionnel de poids par classe, comme le reste du registre."""
 
     def __init__(
         self,
@@ -38,9 +38,9 @@ class XGBTextClassifier(BaseEstimator, ClassifierMixin):
         random_state: int = 42,
         class_weight: dict[str, float] | None = None,
     ):
-        # Every constructor arg must be stored verbatim as an identically-
-        # named attribute, unmodified -- sklearn's get_params()/clone()
-        # contract (used throughout benchmark.py's CV loops) depends on it.
+        # Chaque argument du constructeur doit être stocké tel quel comme un
+        # attribut de même nom, non modifié -- le contrat get_params()/clone()
+        # de sklearn (utilisé partout dans les boucles CV de benchmark.py) en dépend.
         self.n_estimators = n_estimators
         self.max_depth = max_depth
         self.learning_rate = learning_rate
@@ -69,15 +69,15 @@ class XGBTextClassifier(BaseEstimator, ClassifierMixin):
         return self._label_encoder.inverse_transform(self._model.predict(X))
 
     def predict_proba(self, X):  # noqa: N803
-        # XGBClassifier's column order follows the label encoder's fit
-        # order, which is exactly self.classes_ (both alphabetically
-        # sorted) -- no reordering needed.
+        # L'ordre des colonnes de XGBClassifier suit l'ordre de fit du label
+        # encoder, qui est exactement self.classes_ (les deux triés par
+        # ordre alphabétique) -- aucune réorganisation nécessaire.
         return self._model.predict_proba(X)
 
     def decision_function(self, X):  # noqa: N803
-        # Not natively provided by XGBClassifier -- exposed anyway so any
-        # caller that prefers decision_function over predict_proba (none
-        # currently do; get_ranking_scores in evaluation_metrics.py checks
-        # predict_proba first) still gets ranking scores instead of an
+        # Non fourni nativement par XGBClassifier -- exposé quand même pour que tout
+        # appelant qui préfère decision_function à predict_proba (aucun ne
+        # le fait actuellement ; get_ranking_scores dans evaluation_metrics.py vérifie
+        # predict_proba en premier) obtienne quand même des scores de classement plutôt qu'une
         # AttributeError.
         return self.predict_proba(X)

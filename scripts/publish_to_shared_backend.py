@@ -1,23 +1,23 @@
 """
-One-off script: republish the current LOCAL "production" model into the
-shared MLflow backend (Neon Postgres + S3-compatible storage) used for the
-team's Cloud Run deployment.
+Script ponctuel : republie le modèle "production" LOCAL actuel dans le
+backend MLflow partagé (Neon Postgres + stockage compatible S3) utilisé pour
+le déploiement Cloud Run de l'équipe.
 
-Why this exists: the shared backend starts empty — there is no built-in
-MLflow way to "copy" a registered model (plus its metrics) between two
-different backends. This script does the simplest thing that works: load
-the model already serving locally, then log + register + alias it again
-against the shared backend, exactly like train.py's ``champion_final`` run
-does for the local one.
+Pourquoi cela existe : le backend partagé démarre vide — il n'existe pas de moyen
+MLflow natif pour "copier" un modèle enregistré (plus ses métriques) entre deux
+backends différents. Ce script fait la chose la plus simple qui fonctionne : charger
+le modèle qui sert déjà localement, puis le logger + l'enregistrer + l'aliaser à nouveau
+contre le backend partagé, exactement comme le fait le run ``champion_final`` de
+train.py pour le backend local.
 
-Usage (see the commented MLFLOW_TRACKING_URI / MLFLOW_ARTIFACT_ROOT lines
-in .env — "MLflow — backend partagé"): uncomment those two lines, fill in
-the new Neon password, then run:
+Utilisation (voir les lignes MLFLOW_TRACKING_URI / MLFLOW_ARTIFACT_ROOT commentées
+dans .env — "MLflow — backend partagé") : décommenter ces deux lignes, renseigner
+le nouveau mot de passe Neon, puis exécuter :
 
     python scripts/publish_to_shared_backend.py
 
-Safe to re-run: each run creates one new version on the shared backend and
-re-points the "production" alias to it — never touches the local store.
+Sûr à relancer : chaque exécution crée une nouvelle version sur le backend partagé et
+repointe l'alias "production" vers elle — ne touche jamais au store local.
 """
 from __future__ import annotations
 
@@ -26,10 +26,10 @@ import logging
 import mlflow
 from dotenv import load_dotenv
 
-# Must run before the mlflow_config import below reads MLFLOW_TRACKING_URI /
-# MLFLOW_ARTIFACT_ROOT from the environment — nothing else in this project's
-# MLflow/train/promote code path loads .env (only the Streamlit app does),
-# so this script has to do it itself.
+# Doit s'exécuter avant que l'import mlflow_config ci-dessous ne lise MLFLOW_TRACKING_URI /
+# MLFLOW_ARTIFACT_ROOT depuis l'environnement — rien d'autre dans le chemin de code
+# MLflow/train/promote de ce projet ne charge .env (seule l'app Streamlit le fait),
+# donc ce script doit le faire lui-même.
 load_dotenv()
 
 from mental_health.api.model_loader import load_production_model  # noqa: E402
@@ -61,10 +61,10 @@ def main() -> None:
             "publishing to the local store would be a no-op."
         )
 
-    # Read the source model from the LOCAL store explicitly (not whatever
-    # the environment happens to point at), so "what are we republishing"
-    # is never ambiguous even once MLFLOW_TRACKING_URI is set to the shared
-    # backend for the rest of this script.
+    # Lire le modèle source depuis le store LOCAL explicitement (pas
+    # ce vers quoi pointe l'environnement), afin que "qu'est-ce qu'on est en train de
+    # republier" ne soit jamais ambigu même une fois MLFLOW_TRACKING_URI défini sur le backend
+    # partagé pour le reste de ce script.
     local_uri = f"sqlite:///{PROJECT_ROOT / 'mlflow.db'}"
     logger.info("Loading the current LOCAL production model from %s ...", local_uri)
     mlflow.set_tracking_uri(local_uri)

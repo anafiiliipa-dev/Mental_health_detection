@@ -1,8 +1,8 @@
 """
-Model loading and prediction service.
+Service de chargement de modèle et de prédiction.
 
-Centralises all model I/O so that app.py and notebooks
-never call joblib directly.
+Centralise tous les I/O de modèle afin que app.py et les notebooks
+n'appellent jamais joblib directement.
 """
 from __future__ import annotations
 
@@ -15,11 +15,11 @@ import pandas as pd
 from mental_health.config.paths import CLASS_LABELS, MODEL_CANDIDATES
 
 # ============================================================
-# Model loading
+# Chargement du modèle
 # ============================================================
 
 def find_model_path(model_name: str) -> Path | None:
-    """Return the first existing path for *model_name*, or None."""
+    """Retourne le premier chemin existant pour *model_name*, ou None."""
     for candidate in MODEL_CANDIDATES.get(model_name, []):
         if candidate.exists():
             return candidate
@@ -28,12 +28,12 @@ def find_model_path(model_name: str) -> Path | None:
 
 def load_model(model_name: str) -> tuple[Any | None, Path | None, str | None]:
     """
-    Load a joblib model by name.
+    Charge un modèle joblib par son nom.
 
     Returns
     -------
     (model, path, error_message)
-        model is None when loading fails; error_message is None on success.
+        model est None en cas d'échec de chargement ; error_message est None en cas de succès.
     """
     model_path = find_model_path(model_name)
 
@@ -48,7 +48,7 @@ def load_model(model_name: str) -> tuple[Any | None, Path | None, str | None]:
 
 
 # ============================================================
-# Prediction helpers
+# Fonctions d'aide à la prédiction
 # ============================================================
 
 def predict_with_model(
@@ -56,12 +56,12 @@ def predict_with_model(
     text: str,
 ) -> tuple[str, float | None, pd.DataFrame]:
     """
-    Run inference with a loaded sklearn-compatible model.
+    Exécute l'inférence avec un modèle chargé compatible sklearn.
 
     Returns
     -------
     (predicted_label, confidence, probability_dataframe)
-        confidence is None when the model does not expose predict_proba.
+        confidence est None quand le modèle n'expose pas predict_proba.
     """
     prediction: str = str(model.predict([text])[0])
 
@@ -82,9 +82,9 @@ def predict_with_model(
 
 def fallback_demo_prediction(text: str) -> tuple[str, float, pd.DataFrame]:
     """
-    Heuristic-based demo prediction used when no real model is available.
+    Prédiction de démo basée sur des heuristiques, utilisée quand aucun modèle réel n'est disponible.
 
-    This is clearly labelled as demo mode in the UI.
+    Ceci est clairement signalé comme mode démo dans l'UI.
     """
     _HEURISTICS = [
         ("Schizophrenia", ["voices", "watching me", "paranoid", "they are after me", "hallucination"]),
@@ -122,21 +122,21 @@ def fallback_demo_prediction(text: str) -> tuple[str, float, pd.DataFrame]:
     return str(prob_df.loc[0, "Class"]), float(prob_df.loc[0, "Probability"]), prob_df
 
 # ============================================================
-# Evaluation artifact loading
+# Chargement des artefacts d'évaluation
 # ============================================================
 
 def load_csv_with_fallback(relative_path: str) -> tuple[pd.DataFrame | None, Path | None, bool]:
     """
-    Load an evaluation CSV from the real reports folder.
+    Charge un CSV d'évaluation depuis le vrai dossier de rapports.
 
-    If the real artifact does not exist, fallback to docs/sample_outputs/
-    using the same filename.
+    Si l'artefact réel n'existe pas, recours à docs/sample_outputs/
+    en utilisant le même nom de fichier.
 
     Returns
     -------
     (dataframe, path_used, is_sample)
-        dataframe is None when no file is found.
-        is_sample is True when the fallback sample file is used.
+        dataframe est None quand aucun fichier n'est trouvé.
+        is_sample est True quand le fichier d'exemple de recours est utilisé.
     """
     base_dir = Path(__file__).resolve().parents[2]
 

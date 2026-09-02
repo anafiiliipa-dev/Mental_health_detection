@@ -1,16 +1,18 @@
 """
-Simulates the arrival of new incoming messages for drift monitoring.
+Simule l'arrivée de nouveaux messages entrants pour le monitoring du drift.
 
-The project has no live production traffic yet, so — per the documented
-decision (architecture diagram nodes 02/15/16) — the "mock stream" is a
-sample drawn from the training dataset's held-out test split: rows the
-champion model never trained on, standing in for genuinely new messages
-until real request logs exist to replace this.
+Le projet n'a pas encore de trafic de production réel, donc — selon la
+décision documentée (nœuds 02/15/16 du diagramme d'architecture) — le "mock
+stream" est un échantillon tiré du split de test mis de côté du jeu de
+données d'entraînement : des lignes sur lesquelles le modèle champion ne
+s'est jamais entraîné, faisant office de substitut à de véritables nouveaux
+messages jusqu'à ce que de vrais logs de requêtes existent pour remplacer
+cela.
 
-Reproduces the exact same stratified split as ``train.py``'s
-``build_splits`` (same ``TEST_SIZE``, same ``RANDOM_STATE``), so the
-"reference" set here always matches what the currently-serving model
-actually trained on.
+Reproduit exactement le même split stratifié que ``build_splits`` de
+``train.py`` (même ``TEST_SIZE``, même ``RANDOM_STATE``), afin que
+l'ensemble de "référence" ici corresponde toujours à ce sur quoi le modèle
+actuellement en service s'est réellement entraîné.
 """
 from __future__ import annotations
 
@@ -26,13 +28,13 @@ TEST_SIZE = 0.2
 
 def build_reference_and_holdout(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Split ``df`` exactly like ``train.py`` does, keeping only the columns
-    the drift check needs (``TEXT_COL``, ``TARGET_COL``).
+    Découpe ``df`` exactement comme le fait ``train.py``, en ne conservant que
+    les colonnes dont le drift check a besoin (``TEXT_COL``, ``TARGET_COL``).
 
-    Returns ``(reference_df, holdout_df)``:
-    - ``reference_df``: the training rows — what the model has "seen".
-    - ``holdout_df``: the untouched test rows — the sampling pool for the
-      mock stream.
+    Retourne ``(reference_df, holdout_df)`` :
+    - ``reference_df`` : les lignes d'entraînement — ce que le modèle a "vu".
+    - ``holdout_df`` : les lignes de test intactes — le pool d'échantillonnage
+      pour le mock stream.
     """
     idx = np.arange(len(df))
     train_idx, test_idx = train_test_split(
@@ -47,30 +49,33 @@ def sample_mock_batch(
     holdout_df: pd.DataFrame, n: int, random_state: int | None = None, simulate_drift: bool = False
 ) -> pd.DataFrame:
     """
-    Sample ``n`` rows from the holdout pool — one simulated batch of newly
-    arrived messages.
+    Échantillonne ``n`` lignes du pool holdout — un lot simulé de messages
+    nouvellement arrivés.
 
-    ``random_state=None`` (the default) draws a different sample every
-    call, which is what a real weekly cron run should do. Pass a fixed
-    seed in tests for reproducibility. If the pool has fewer than ``n``
-    rows, the whole pool is returned instead of raising.
+    ``random_state=None`` (la valeur par défaut) tire un échantillon
+    différent à chaque appel, ce qu'un vrai run cron hebdomadaire devrait
+    faire. Passer une graine fixe dans les tests pour la reproductibilité.
+    Si le pool a moins de ``n`` lignes, le pool entier est retourné au lieu
+    de lever une erreur.
 
-    ``simulate_drift=True`` deliberately returns a SKEWED batch instead of
-    an honest random sample — decided with Ana: with no live production
-    traffic yet, an honest holdout sample is drawn from the exact same
-    distribution as training, so it essentially never trips Evidently's
-    drift preset. That makes the whole detection -> alert -> retrain loop
-    impossible to observe running end-to-end. This mode exists purely to
-    exercise that loop on a predictable cadence (see drift_monitoring.yml,
-    which now always runs with this on) -- it is NOT a realistic traffic
-    simulation and must not be read as one.
+    ``simulate_drift=True`` retourne volontairement un lot BIAISÉ plutôt
+    qu'un échantillon aléatoire honnête — décidé avec Ana : sans trafic de
+    production réel pour l'instant, un échantillon holdout honnête est tiré
+    exactement de la même distribution que l'entraînement, donc il ne
+    déclenche pratiquement jamais le preset de drift d'Evidently. Cela rend
+    toute la boucle détection -> alerte -> réentraînement impossible à
+    observer de bout en bout. Ce mode existe uniquement pour exercer cette
+    boucle sur une cadence prévisible (voir drift_monitoring.yml, qui
+    s'exécute désormais toujours avec cette option activée) -- ce n'est PAS
+    une simulation de trafic réaliste et ne doit pas être interprété comme
+    tel.
 
-    The skew hits both columns Evidently compares in build_drift_frames:
-    - "prediction" (categorical drift): the batch is drawn from a single
-      label only (the rarest one in the pool), instead of the pool's
-      natural class mix.
-    - "text_length" (numerical drift): each sampled text is duplicated
-      against itself, roughly doubling its length.
+    Le biais touche les deux colonnes qu'Evidently compare dans
+    build_drift_frames :
+    - "prediction" (drift catégoriel) : le lot est tiré d'un seul label
+      (le plus rare du pool), au lieu du mélange de classes naturel du pool.
+    - "text_length" (drift numérique) : chaque texte échantillonné est
+      dupliqué avec lui-même, doublant environ sa longueur.
     """
     if not simulate_drift:
         n = min(n, len(holdout_df))

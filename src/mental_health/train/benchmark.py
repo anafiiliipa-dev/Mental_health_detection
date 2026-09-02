@@ -1,27 +1,28 @@
 """
-Cross-validation benchmark utilities: light CV and nested CV.
+Utilitaires de benchmark de validation croisée : CV légère et nested CV.
 
-Extracted and corrected from ``notebooks/02_classical_ml.ipynb`` (cells
+Extrait et corrigé de ``notebooks/02_classical_ml.ipynb`` (cellules
 "PHASE 5 — CLINICAL SCORING", "sample_param_grid", "PHASE 6 —
-run_light_cv_benchmark" and "run_light_nested_cv_benchmark").
+run_light_cv_benchmark" et "run_light_nested_cv_benchmark").
 
-Corrections relative to the original notebook:
+Corrections par rapport au notebook original :
 
-1. ``critical_recall_score`` used a hardcoded ``CRITICAL_LABELS = ["Bipolar",
-   "schizophrenia"]`` (lowercase schizophrenia — the same casing bug found
-   elsewhere in the audit). It now imports ``CRITICAL_LABELS`` from
-   ``mental_health.config.paths`` instead, matching the corrected label
-   casing produced by ``cleaning.py``.
-2. The "robust score" formula was NOT consistent between the light CV and
-   nested CV sections of the notebook: light CV weighted
-   ``0.4 * f1_macro + 0.3 * recall_macro + 0.3 * critical_recall``, while
-   nested CV weighted ``0.4 * critical_recall + 0.3 * recall_macro +
-   0.3 * f1_macro`` — the F1 and critical-recall weights were swapped. This
-   didn't affect the champion selection itself (only ``nested_cv`` results
-   are used to pick the champion), but it's a real inconsistency. Both
-   benchmarks here now share a single ``compute_robust_score`` function
-   using the nested-CV weighting, since that is the one that actually
-   drove the champion decision.
+1. ``critical_recall_score`` utilisait un ``CRITICAL_LABELS = ["Bipolar",
+   "schizophrenia"]`` codé en dur (schizophrenia en minuscules — le même bug
+   de casse trouvé ailleurs dans l'audit). Il importe désormais
+   ``CRITICAL_LABELS`` depuis ``mental_health.config.paths``, en accord
+   avec la casse de label corrigée produite par ``cleaning.py``.
+2. La formule du "robust score" n'était PAS cohérente entre les sections CV
+   légère et nested CV du notebook : la CV légère pondérait
+   ``0.4 * f1_macro + 0.3 * recall_macro + 0.3 * critical_recall``, tandis que
+   la nested CV pondérait ``0.4 * critical_recall + 0.3 * recall_macro +
+   0.3 * f1_macro`` — les poids du F1 et du critical-recall étaient inversés.
+   Cela n'affectait pas la sélection du champion elle-même (seuls les
+   résultats de ``nested_cv`` sont utilisés pour choisir le champion), mais
+   c'est une vraie incohérence. Les deux benchmarks ici partagent désormais
+   une seule fonction ``compute_robust_score`` utilisant la pondération de
+   la nested CV, puisque c'est elle qui a réellement déterminé la décision
+   du champion.
 """
 from __future__ import annotations
 
@@ -37,9 +38,9 @@ from sklearn.model_selection import StratifiedKFold
 from mental_health.config.paths import CRITICAL_LABELS
 from mental_health.train.model_registry import RANDOM_STATE
 
-# Weighting used to combine the three metrics into a single ranking score.
-# critical_recall is weighted highest because missing a critical-class post
-# (Bipolar / Schizophrenia) is the costliest error for this project.
+# Pondération utilisée pour combiner les trois métriques en un seul score de classement.
+# critical_recall a le poids le plus élevé car manquer un post d'une classe critique
+# (Bipolar / Schizophrenia) est l'erreur la plus coûteuse pour ce projet.
 ROBUST_SCORE_WEIGHTS = {
     "critical_recall": 0.4,
     "recall_macro": 0.3,
@@ -48,14 +49,14 @@ ROBUST_SCORE_WEIGHTS = {
 
 
 def critical_recall_score(y_true, y_pred, critical_labels: list[str] = CRITICAL_LABELS) -> float:
-    """Mean recall across the clinically critical labels only."""
+    """Recall moyen sur les seuls labels cliniquement critiques."""
     report = classification_report(y_true, y_pred, output_dict=True, zero_division=0)
     recalls = [report[label]["recall"] for label in critical_labels if label in report]
     return float(np.mean(recalls)) if recalls else 0.0
 
 
 def compute_robust_score(f1_macro: float, recall_macro: float, critical_recall: float) -> float:
-    """Single weighted score combining macro-F1, macro-recall and critical recall."""
+    """Score unique pondéré combinant macro-F1, macro-recall et critical recall."""
     return (
         ROBUST_SCORE_WEIGHTS["critical_recall"] * critical_recall
         + ROBUST_SCORE_WEIGHTS["recall_macro"] * recall_macro
@@ -64,7 +65,7 @@ def compute_robust_score(f1_macro: float, recall_macro: float, critical_recall: 
 
 
 def sample_param_grid(param_grid: dict, max_candidates: int = 4, random_state: int = RANDOM_STATE) -> list[dict]:
-    """Sample up to ``max_candidates`` combinations from a sklearn-style param grid."""
+    """Échantillonne jusqu'à ``max_candidates`` combinaisons depuis une grille de paramètres de style sklearn."""
     if not param_grid:
         return [{}]
 
@@ -97,9 +98,10 @@ def run_light_cv_benchmark(
     random_state: int = RANDOM_STATE,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     """
-    Quick screening benchmark: for each candidate model, sample a few
-    hyperparameter combinations, pick the best by mean F1 on a light CV,
-    then report per-fold metrics for that best configuration.
+    Benchmark de screening rapide : pour chaque modèle candidat, échantillonne
+    quelques combinaisons d'hyperparamètres, choisit la meilleure par F1 moyen
+    sur une CV légère, puis rapporte les métriques par fold pour cette
+    meilleure configuration.
     """
     X_train = pd.Series(X_train).reset_index(drop=True)
     y_train = pd.Series(y_train).reset_index(drop=True)
@@ -183,10 +185,10 @@ def run_nested_cv_benchmark(
     random_state: int = RANDOM_STATE,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     """
-    Nested CV: an outer loop estimates generalisation performance, an inner
-    loop selects hyperparameters (by ``compute_robust_score``) without ever
-    touching the outer test fold. This is the benchmark that actually
-    decides the champion model.
+    Nested CV : une boucle externe estime la performance de généralisation, une
+    boucle interne sélectionne les hyperparamètres (via ``compute_robust_score``)
+    sans jamais toucher au fold de test externe. C'est ce benchmark qui décide
+    réellement du modèle champion.
     """
     X_train = pd.Series(X_train).reset_index(drop=True)
     y_train = pd.Series(y_train).reset_index(drop=True)

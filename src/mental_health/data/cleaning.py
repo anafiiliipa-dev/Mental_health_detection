@@ -1,38 +1,41 @@
 """
-Data cleaning pipeline for the raw Mental Health Detection dataset.
+Pipeline de nettoyage des données pour le jeu de données brut Mental Health Detection.
 
-Extracted and corrected from ``notebooks/01_data_cleaning.ipynb`` so the
-cleaning logic is testable, reusable and reproducible from the command line
-instead of living only inside a notebook.
+Extrait et corrigé à partir de ``notebooks/01_data_cleaning.ipynb`` afin que la
+logique de nettoyage soit testable, réutilisable et reproductible en ligne de
+commande plutôt que de vivre uniquement dans un notebook.
 
-Corrections applied relative to the original notebook (see
-``audit-dataset-brut.md`` in the project for the full investigation):
+Corrections apportées par rapport au notebook original (voir
+``audit-dataset-brut.md`` dans le projet pour l'enquête complète) :
 
-1. ``schizophrenia`` is now correctly canonicalised to ``"Schizophrenia"``
-   (title case, consistent with every other label) instead of staying
-   lowercase — the original mapping silently broke case-sensitive filters
-   downstream (e.g. ``CRITICAL_LABELS`` in the clinical evaluation notebook).
-2. Exact duplicates (identical ``body`` + ``category``) are now removed.
-   The original notebook only ever explored this in the throwaway
-   ``00_exploration.ipynb`` scratchpad — it never made it into the real
-   cleaning pipeline.
-3. Rows where the same ``body`` text appears under more than one distinct
-   ``category`` (label noise) are dropped entirely, since we have no
-   reliable way to arbitrate which label is correct.
-4. Near-empty texts (fewer than ``MIN_BODY_LENGTH`` characters) are
-   filtered out as noise. Long texts are deliberately kept — they are
-   verbose but legitimate posts, not noise.
-5. The ``body_masked`` column (diagnostic/medication terms replaced with
-   ``[CONDITION]``, used as the leakage-robustness text variant in
-   training) is added at the end of the pipeline, via
-   ``mental_health.data.masking``. Behaviourally identical to the
-   notebook's masking logic — only the label-casing fix above changes
-   which text variant ends up selected as champion downstream.
+1. ``schizophrenia`` est désormais correctement canonicalisé en ``"Schizophrenia"``
+   (title case, cohérent avec tous les autres labels) au lieu de rester en
+   minuscules — le mapping original cassait silencieusement les filtres
+   sensibles à la casse en aval (par ex. ``CRITICAL_LABELS`` dans le notebook
+   d'évaluation clinique).
+2. Les doublons exacts (``body`` + ``category`` identiques) sont désormais
+   supprimés. Le notebook original n'explorait cela que dans le brouillon
+   jetable ``00_exploration.ipynb`` — cela n'a jamais atteint le vrai
+   pipeline de nettoyage.
+3. Les lignes où le même texte ``body`` apparaît sous plus d'une ``category``
+   distincte (bruit d'étiquetage) sont entièrement supprimées, car nous
+   n'avons aucun moyen fiable d'arbitrer quel label est correct.
+4. Les textes quasi vides (moins de ``MIN_BODY_LENGTH`` caractères) sont
+   filtrés en tant que bruit. Les textes longs sont volontairement conservés
+   — ce sont des posts verbeux mais légitimes, pas du bruit.
+5. La colonne ``body_masked`` (les termes de diagnostic/médication remplacés
+   par ``[CONDITION]``, utilisée comme variante textuelle robuste aux fuites
+   pour l'entraînement) est ajoutée à la fin du pipeline, via
+   ``mental_health.data.masking``. Comportement identique à la logique de
+   masquage du notebook — seule la correction de casse des labels ci-dessus
+   change quelle variante de texte finit par être sélectionnée comme
+   championne en aval.
 
-Near-duplicate detection (MinHash/LSH) is intentionally NOT included here.
-It is real, useful work already prototyped in ``00_exploration.ipynb``, but
-it adds a new dependency (``datasketch``) and non-trivial complexity — it is
-left as a documented follow-up rather than ported blindly.
+La détection de quasi-doublons (MinHash/LSH) est volontairement NON incluse
+ici. C'est un travail réel et utile déjà prototypé dans
+``00_exploration.ipynb``, mais cela ajoute une nouvelle dépendance
+(``datasketch``) et une complexité non négligeable — c'est laissé comme
+suite documentée plutôt que porté aveuglément.
 """
 from __future__ import annotations
 
@@ -47,7 +50,7 @@ from mental_health.data.masking import add_masked_column
 logger = logging.getLogger(__name__)
 
 # ============================================================
-# Constants
+# Constantes
 # ============================================================
 
 TEXT_COL = "body"
@@ -55,14 +58,14 @@ TARGET_COL = "category"
 MASKED_COL = "body_masked"
 REQUIRED_COLUMNS = [TEXT_COL, TARGET_COL]
 
-# Minimum text length (characters, after stripping) to keep a row.
-# Anything shorter is treated as noise, not a legitimate short post.
+# Longueur minimale du texte (caractères, après nettoyage) pour conserver une ligne.
+# Tout ce qui est plus court est traité comme du bruit, pas comme un post court légitime.
 MIN_BODY_LENGTH = 10
 
-# Canonical label mapping. Every raw variant (case, synonym, abbreviation)
-# maps to exactly one of the 7 official CLASS_LABELS, all in title case.
-# NOTE: "schizophrenia" maps to "Schizophrenia" (title case) — this was the
-# one entry that stayed lowercase in the original notebook.
+# Mapping canonique des labels. Chaque variante brute (casse, synonyme, abréviation)
+# est mappée vers exactement un des 7 CLASS_LABELS officiels, tous en title case.
+# NOTE : "schizophrenia" est mappé vers "Schizophrenia" (title case) — c'était la
+# seule entrée restée en minuscules dans le notebook original.
 CANONICAL_LABELS: dict[str, str] = {
     "adhd": "ADHD",
     "add": "ADHD",
@@ -82,19 +85,19 @@ CANONICAL_LABELS: dict[str, str] = {
 
 
 # ============================================================
-# Loading & schema validation
+# Chargement & validation du schéma
 # ============================================================
 
 def load_raw_dataset(path: Path = RAW_DATA_PATH) -> pd.DataFrame:
     """
-    Load the raw dataset and validate that the required columns exist.
+    Charge le jeu de données brut et valide que les colonnes requises existent.
 
     Raises
     ------
     FileNotFoundError
-        If ``path`` does not exist.
+        Si ``path`` n'existe pas.
     ValueError
-        If ``body`` or ``category`` is missing from the columns.
+        Si ``body`` ou ``category`` est absent des colonnes.
     """
     if not path.exists():
         raise FileNotFoundError(f"Raw dataset not found at {path}")
@@ -110,11 +113,11 @@ def load_raw_dataset(path: Path = RAW_DATA_PATH) -> pd.DataFrame:
 
 
 # ============================================================
-# Individual cleaning steps
+# Étapes de nettoyage individuelles
 # ============================================================
 
 def normalize_labels(df: pd.DataFrame) -> pd.DataFrame:
-    """Map raw category values to the canonical label set, dropping unmapped rows."""
+    """Mappe les valeurs brutes de category vers l'ensemble canonique de labels, en supprimant les lignes non mappées."""
     before = len(df)
 
     df = df.copy()
@@ -133,7 +136,7 @@ def normalize_labels(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def drop_missing_values(df: pd.DataFrame) -> pd.DataFrame:
-    """Drop rows with a missing text or label."""
+    """Supprime les lignes dont le texte ou le label est manquant."""
     before = len(df)
     df = df.dropna(subset=REQUIRED_COLUMNS).copy()
     removed = before - len(df)
@@ -142,7 +145,7 @@ def drop_missing_values(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def drop_exact_duplicates(df: pd.DataFrame) -> pd.DataFrame:
-    """Drop rows that are exact duplicates of (body, category)."""
+    """Supprime les lignes qui sont des doublons exacts de (body, category)."""
     before = len(df)
     df = df.drop_duplicates(subset=REQUIRED_COLUMNS).copy()
     removed = before - len(df)
@@ -152,11 +155,11 @@ def drop_exact_duplicates(df: pd.DataFrame) -> pd.DataFrame:
 
 def drop_label_conflicts(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Drop every row whose text is associated with more than one distinct label.
+    Supprime chaque ligne dont le texte est associé à plus d'un label distinct.
 
-    We have no reliable signal for arbitrating which label is correct in
-    these cases, so both (or all) conflicting occurrences are removed
-    rather than guessed at.
+    Nous n'avons aucun signal fiable pour arbitrer quel label est correct
+    dans ces cas, donc les occurrences en conflit (deux ou plus) sont
+    toutes supprimées plutôt que devinées.
     """
     before = len(df)
 
@@ -174,7 +177,7 @@ def drop_label_conflicts(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def filter_short_texts(df: pd.DataFrame, min_length: int = MIN_BODY_LENGTH) -> pd.DataFrame:
-    """Drop rows whose (stripped) text is shorter than ``min_length`` characters."""
+    """Supprime les lignes dont le texte (nettoyé) est plus court que ``min_length`` caractères."""
     before = len(df)
     text_len = df[TEXT_COL].astype(str).str.strip().str.len()
     df = df[text_len >= min_length].copy()
@@ -184,11 +187,11 @@ def filter_short_texts(df: pd.DataFrame, min_length: int = MIN_BODY_LENGTH) -> p
 
 
 # ============================================================
-# Orchestrator
+# Orchestrateur
 # ============================================================
 
 def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
-    """Run the full cleaning pipeline in order and return the cleaned dataframe."""
+    """Exécute le pipeline de nettoyage complet dans l'ordre et retourne le dataframe nettoyé."""
     logger.info("Starting cleaning pipeline: %d raw rows", len(df))
 
     df = normalize_labels(df)
@@ -204,12 +207,12 @@ def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def run(input_path: Path = RAW_DATA_PATH, output_path: Path = DEFAULT_CLEAN_DATA_PATH) -> pd.DataFrame:
-    """Load, clean and export the dataset. Returns the cleaned dataframe."""
+    """Charge, nettoie et exporte le jeu de données. Retourne le dataframe nettoyé."""
     df_raw = load_raw_dataset(input_path)
     df_clean = clean_dataset(df_raw)
 
-    # Fixed column order (body, body_masked, category), matching the
-    # original notebook's export format.
+    # Ordre de colonnes fixe (body, body_masked, category), correspondant au
+    # format d'export du notebook original.
     df_clean = df_clean[[TEXT_COL, MASKED_COL, TARGET_COL]]
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

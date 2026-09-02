@@ -1,31 +1,30 @@
 """
-Explicit, script-driven promotion from "staging" to "production" in the
+Promotion explicite et pilotée par script de "staging" vers "production" dans le
 MLflow Model Registry.
 
-Addresses a governance gap flagged in the initial audit (Étape F —
-"blind spots"): MLflow answers "which model is in production?", but not
-the symmetric question "who has the right to promote a model?". For a
-solo project, the answer adopted here is: **only this script, with
-explicit, documented thresholds — never a manual click in the MLflow UI.**
+Répond à une lacune de gouvernance signalée dans l'audit initial (Étape F —
+"blind spots") : MLflow répond à "quel modèle est en production ?", mais pas
+à la question symétrique "qui a le droit de promouvoir un modèle ?". Pour un
+projet solo, la réponse adoptée ici est : **seul ce script, avec des
+seuils explicites et documentés — jamais un clic manuel dans l'UI MLflow.**
 
-Promotion rule (deliberately simple, not over-engineered):
+Règle de promotion (délibérément simple, non sur-conçue) :
 
-- If there is no current "production" version, the "staging" candidate is
-  promoted automatically (bootstrap case — there's nothing to regress
-  against).
-- Otherwise, the candidate is promoted only if it does not regress on
-  EITHER headline metric versus the current production model:
-  ``f1_macro`` and ``critical_recall`` must both be >= the production
-  model's values. ``critical_recall`` is checked because it's the
-  clinically critical metric (Bipolar/Schizophrenia) — a model that trades
-  critical recall for overall F1 is not an acceptable trade for this
-  project, per the priorities documented in ``benchmark.py``.
+- S'il n'y a pas de version "production" actuelle, le candidat "staging" est
+  promu automatiquement (cas de bootstrap — il n'y a rien contre quoi régresser).
+- Sinon, le candidat n'est promu que s'il ne régresse sur AUCUNE
+  des deux métriques principales par rapport au modèle de production actuel :
+  ``f1_macro`` et ``critical_recall`` doivent tous deux être >= aux
+  valeurs du modèle de production. ``critical_recall`` est vérifié car c'est la
+  métrique cliniquement critique (Bipolar/Schizophrenia) — un modèle qui sacrifie
+  le rappel critique pour un meilleur F1 global n'est pas un compromis acceptable pour ce
+  projet, selon les priorités documentées dans ``benchmark.py``.
 
-This is intentionally NOT a statistical significance test (e.g. bootstrap
-comparison) — that's flagged as a SHOULD-HAVE in the audit, not required
-to close this phase. The threshold logic here is a simple, auditable
-gate that can be replaced with a stricter one later without changing how
-it's invoked.
+Ceci n'est délibérément PAS un test de significativité statistique (par ex. une
+comparaison par bootstrap) — c'est signalé comme un SHOULD-HAVE dans l'audit, pas requis
+pour clore cette phase. La logique de seuil ici est une porte simple et
+auditable qui pourra être remplacée par une plus stricte plus tard sans changer la façon
+dont elle est invoquée.
 """
 from __future__ import annotations
 
@@ -35,9 +34,9 @@ import mlflow
 from dotenv import load_dotenv
 from mlflow.exceptions import MlflowException
 
-# Must run before the mlflow_config import below reads MLFLOW_TRACKING_URI /
-# MLFLOW_ARTIFACT_ROOT from the environment (e.g. a shared team backend
-# instead of the local SQLite default) — see mlflow_config.py's docstring.
+# Doit s'exécuter avant que l'import mlflow_config ci-dessous ne lise MLFLOW_TRACKING_URI /
+# MLFLOW_ARTIFACT_ROOT depuis l'environnement (par ex. un backend d'équipe partagé
+# au lieu du SQLite local par défaut) — voir la docstring de mlflow_config.py.
 load_dotenv()
 
 from mental_health.config.mlflow_config import (  # noqa: E402
@@ -53,7 +52,7 @@ GATED_METRICS = ["f1_macro", "critical_recall"]
 
 
 def get_metrics_for_version(client: mlflow.MlflowClient, model_name: str, version: str) -> dict:
-    """Fetch the metrics logged on the MLflow run that produced this model version."""
+    """Récupère les métriques enregistrées sur le run MLflow ayant produit cette version du modèle."""
     model_version = client.get_model_version(model_name, version)
     run = client.get_run(model_version.run_id)
     return dict(run.data.metrics)
@@ -61,8 +60,8 @@ def get_metrics_for_version(client: mlflow.MlflowClient, model_name: str, versio
 
 def evaluate_promotion(candidate_metrics: dict, production_metrics: dict | None) -> tuple[bool, str]:
     """
-    Decide whether ``candidate_metrics`` should be promoted over
-    ``production_metrics``. Returns (should_promote, human_readable_reason).
+    Décide si ``candidate_metrics`` doit être promu par rapport à
+    ``production_metrics``. Retourne (should_promote, human_readable_reason).
     """
     if production_metrics is None:
         return True, "No current production model — bootstrap promotion."
@@ -81,9 +80,9 @@ def evaluate_promotion(candidate_metrics: dict, production_metrics: dict | None)
 
 def promote_staging_to_production(model_name: str = MLFLOW_REGISTERED_MODEL_NAME) -> dict:
     """
-    Compare the current "staging" model version against the current
-    "production" one (if any) and promote staging to production if it
-    passes ``evaluate_promotion``.
+    Compare la version de modèle "staging" actuelle à la version
+    "production" actuelle (le cas échéant) et promeut staging vers production si elle
+    passe ``evaluate_promotion``.
     """
     client = mlflow.MlflowClient()
 
