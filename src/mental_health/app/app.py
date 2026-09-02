@@ -14,12 +14,16 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+import mlflow
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 from streamlit_option_menu import option_menu
 
+from mental_health.api.main import _predict_with_sklearn_model, _predict_with_transformers_model
+from mental_health.api.model_loader import load_production_model
 from mental_health.app.openrouter_client import ask_llm, get_default_model
+from mental_health.config.mlflow_config import MLFLOW_TRACKING_URI
 from mental_health.config.paths import (
     CLASS_LABELS,
     DEFAULT_CLEAN_DATA_PATH,
@@ -34,6 +38,12 @@ from mental_health.models.services import fallback_demo_prediction, load_model, 
 from mental_health.rag.simple_rag import build_qa_chain
 
 load_dotenv()
+
+# Option ajoutée dans le sélecteur de modèle de la page "Prédictions" pour
+# aller chercher directement le modèle aliasé "production" dans le MLflow
+# Model Registry (au lieu des fichiers .joblib locaux ci-dessous) -- c'est
+# le même modèle que sert l'API FastAPI (mental_health.api.main).
+MLFLOW_PRODUCTION_OPTION = "Modèle en production (MLflow)"
 
 
 # ============================================================
@@ -389,6 +399,21 @@ def load_joblib_model(model_name: str) -> tuple[Any | None, Path | None, str | N
     return load_model(model_name)
 
 
+@st.cache_resource(show_spinner=False)
+def load_mlflow_production_model():
+    """
+    Charge le modèle actuellement aliasé "production" dans le MLflow Model
+    Registry -- le même modèle, servi par le même backend partagé (Neon +
+    S3), que l'API FastAPI sert via /predict. Mis en cache par Streamlit
+    (st.cache_resource) pour ne pas retélécharger le modèle à chaque clic ;
+    utilise "Effacer l'historique des prédictions" puis recharge la page
+    pour forcer un rechargement si une nouvelle version a été promue entre
+    temps.
+    """
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    return load_production_model()
+
+
 def save_prediction_to_history(
     text: str,
     model_name: str,
@@ -620,7 +645,10 @@ def render_predictions() -> None:
                 <div class="section-title">Classification de texte</div>
                 <div class="section-text">
                     Colle un exemple de texte, choisis un modèle, et lance une prédiction.
-                    Si aucun fichier de modèle local n'est disponible, l'application bascule automatiquement en mode démo.
+                    « Modèle en production (MLflow) » va chercher le modèle actuellement déployé
+                    (le même que sert l'API) directement dans le MLflow Model Registry. Les autres
+                    options chargent un fichier de modèle classique local. Si rien n'est disponible,
+                    l'application bascule automatiquement en mode démo.
                 </div>
             </div>
             """,
@@ -636,7 +664,7 @@ def render_predictions() -> None:
 
         selected_model = st.selectbox(
             "Sélectionner un modèle",
-            list(MODEL_CANDIDATES.keys()),
+            [MLFLOW_PRODUCTION_OPTION] + list(MODEL_CANDIDATES.keys()),
             index=0,
         )
 
@@ -663,19 +691,62 @@ def render_predictions() -> None:
             return
 
         with st.spinner("Prédiction en cours..."):
-            model, model_path, load_error = load_joblib_model(selected_model)
+            if selected_model == MLFLOW_PRODUCTION_OPTION:
+                # Chemin MLflow : va chercher le modèle réellement en
+                # production (le même que sert l'API), au lieu d'un fichier
+                # .joblib local -- voir load_mlflow_production_model().
+                loaded = load_mlflow_production_model()
+                model_path = (
+                    f"MLflow Model Registry — mental_health_classifier v{loaded.version} (flavor={loaded.flavor})"
+                    if loaded.is_available else None
+                )
 
-            if model is not None:
-                try:
-                    predicted_label, confidence, prob_df = predict_with_model(model, user_text)
-                    mode = "real"
-                except Exception as exc:
-                    st.error(f"La prédiction a échoué avec le modèle chargé : {exc}")
+                if loaded.is_available:
+                    try:
+                        response = (
+                            _predict_with_transformers_model(loaded.model, user_text)
+                            if loaded.flavor == "transformers"
+                            else _predict_with_sklearn_model(loaded.model, user_text)
+                        )
+                        predicted_label = response.label
+                        confidence = response.confidence
+                        if response.probabilities:
+                            prob_df = (
+                                pd.DataFrame(
+                                    {"Class": list(response.probabilities.keys()),
+                                     "Probability": list(response.probabilities.values())}
+                                )
+                                .sort_values("Probability", ascending=False)
+                                .reset_index(drop=True)
+                            )
+                        else:
+                            prob_df = pd.DataFrame({"Class": [predicted_label], "Probability": [confidence]})
+                        mode = "real"
+                        load_error = None
+                    except Exception as exc:
+                        st.error(f"La prédiction a échoué avec le modèle de production MLflow : {exc}")
+                        predicted_label, confidence, prob_df = fallback_demo_prediction(user_text)
+                        mode = "demo-fallback"
+                        load_error = None
+                else:
                     predicted_label, confidence, prob_df = fallback_demo_prediction(user_text)
-                    mode = "demo-fallback"
+                    mode = "demo"
+                    load_error = f"Aucun modèle 'production' disponible dans MLflow : {loaded.error}"
             else:
-                predicted_label, confidence, prob_df = fallback_demo_prediction(user_text)
-                mode = "demo"
+                # Chemin classique : fichier .joblib local (voir services.py).
+                model, model_path, load_error = load_joblib_model(selected_model)
+
+                if model is not None:
+                    try:
+                        predicted_label, confidence, prob_df = predict_with_model(model, user_text)
+                        mode = "real"
+                    except Exception as exc:
+                        st.error(f"La prédiction a échoué avec le modèle chargé : {exc}")
+                        predicted_label, confidence, prob_df = fallback_demo_prediction(user_text)
+                        mode = "demo-fallback"
+                else:
+                    predicted_label, confidence, prob_df = fallback_demo_prediction(user_text)
+                    mode = "demo"
 
         save_prediction_to_history(
             text=user_text,
