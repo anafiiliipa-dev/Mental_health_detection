@@ -114,14 +114,15 @@ class _FakeTransformersPipeline:
     Stands in for a HF text-classification pipeline -- returns real label
     strings + softmax-normalised scores for every class, the shape
     ``_predict_with_transformers_model`` expects when it passes
-    ``top_k=None`` explicitly on every call (see that function's
-    docstring for why it doesn't rely on the pipeline's own default).
-    Avoids requiring the heavy transformers/torch extra just to test the
-    dispatch/parsing logic on the main.py side.
+    ``top_k=None`` and ``truncation=True`` explicitly on every call (see
+    that function's docstring for why it doesn't rely on the pipeline's
+    own defaults for either). Avoids requiring the heavy transformers/torch
+    extra just to test the dispatch/parsing logic on the main.py side.
     """
 
-    def __call__(self, texts: list[str], top_k: int | None = 1):
+    def __call__(self, texts: list[str], top_k: int | None = 1, truncation: bool = False):
         assert top_k is None, "must request every class explicitly, not rely on the pipeline's own top_k default"
+        assert truncation is True, "must truncate explicitly, not rely on the pipeline's own default (crashes on long text)"
         return [[
             {"label": "Anxiety", "score": 0.82},
             {"label": "Depression", "score": 0.10},

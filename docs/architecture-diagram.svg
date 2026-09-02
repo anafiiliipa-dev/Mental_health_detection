@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2100 1300" role="img" aria-label="Pipeline MLOps de bout en bout : les données historiques et une Mock API alimentent un bucket S3 puis une étape de validation ; le jeu validé entraîne un modèle suivi par MLflow Tracking et versionné dans MLflow Model Registry, dont les métadonnées vivent dans Neon (PostgreSQL) ; une porte de promotion compare automatiquement le candidat au modèle en production ; GitHub Actions teste, construit et interroge périodiquement le Registry ; le déploiement tourne sur GCP Cloud Run (FastAPI servi à Streamlit et à l'utilisateur) ; les logs structurés alimentent un job Evidently planifié qui détecte une dérive et relance le cycle CI/CD.">
+  <style>
+    svg { background: #faf6ec; font-family: "IBM Plex Sans", ui-sans-serif, Helvetica, Arial, sans-serif; }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }
+    .node-title { fill: #10222f; font-weight: 600; }
+    .node-sub { fill: #62768a; }
+    .tag { fill: #b1551f; font-weight: 600; }
+    .lane-label { fill: #62768a; font-weight: 600; letter-spacing: 0.08em; }
+    .flow-label { fill: #62768a; paint-order: stroke; stroke: #faf6ec; stroke-width: 3px; stroke-linejoin: round; }
+    .flow-label-strong { fill: #b1551f; font-weight: 600; paint-order: stroke; stroke: #faf6ec; stroke-width: 3px; stroke-linejoin: round; }
+    .box { fill: #f3ecdd; stroke: #2c4a63; stroke-width: 1.5; }
+    .box-store { fill: #e4efe7; stroke: #3f7d5c; stroke-width: 1.6; }
+    .box-wide { fill: #ecf1ea; stroke: #2c4a63; stroke-width: 1.5; }
+    .box-gcp { fill: none; stroke: #3f7d5c; stroke-width: 1.8; stroke-dasharray: 2 0; }
+    .diamond { fill: #f3ecdd; stroke: #b1551f; stroke-width: 1.8; }
+    .box-job { fill: #f3ecdd; stroke: #2c4a63; stroke-width: 1.4; stroke-dasharray: 6 4; }
+    .box-optional { fill: #f3ecdd; stroke: #8497a5; stroke-width: 1.4; stroke-dasharray: 4 3; }
+    .lane-band-a { fill: #ede4cf; }
+    .lane-band-b { fill: #e7dcc2; }
+    .flow-line { fill: none; stroke: #2c4a63; stroke-width: 1.7; }
+    .flow-line-soft { fill: none; stroke: #8497a5; stroke-width: 1.4; stroke-dasharray: 3 4; }
+    .loop-line { fill: none; stroke: #b1551f; stroke-width: 2.1; stroke-dasharray: 7 5; }
+    .decision-line { fill: none; stroke: #b1551f; stroke-width: 1.9; }
+  </style>
+
+        <defs>
+          <marker id="arrow-line" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--line)"></path>
+          </marker>
+          <marker id="arrow-soft" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--line-soft)"></path>
+          </marker>
+          <marker id="arrow-loop" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"></path>
+          </marker>
+        </defs>
+
+        <!-- ===== LANE BANDS ===== -->
+        <rect class="lane-band-a" x="20" y="35"   width="2060" height="300"></rect>
+        <rect class="lane-band-b" x="20" y="335"  width="2060" height="375"></rect>
+        <rect class="lane-band-a" x="20" y="710"  width="2060" height="125"></rect>
+        <rect class="lane-band-b" x="20" y="835"  width="2060" height="230"></rect>
+        <rect class="lane-band-a" x="20" y="1065" width="2060" height="215"></rect>
+
+        <text class="mono lane-label" x="40" y="58"   font-size="12.5">01 — SOURCES &amp; STOCKAGE (pipeline d'entraînement)</text>
+        <text class="mono lane-label" x="40" y="358"  font-size="12.5">02 — ENTRAÎNEMENT &amp; MLFLOW (batch, hors ligne)</text>
+        <text class="mono lane-label" x="40" y="733"  font-size="12.5">03 — CI/CD (GITHUB ACTIONS)</text>
+        <text class="mono lane-label" x="40" y="858"  font-size="12.5">04 — DÉPLOIEMENT &amp; PIPELINE DE PRÉDICTION (inférence temps réel · GCP Cloud Run)</text>
+        <text class="mono lane-label" x="40" y="1088" font-size="12.5">05 — MONITORING &amp; BOUCLE DE RÉENTRAÎNEMENT</text>
+
+        <!-- ===== LANE 1 : SOURCES ===== -->
+        <rect class="box" x="60" y="90" width="260" height="90" rx="3"></rect>
+        <text class="mono tag" x="76" y="112" font-size="11">01</text>
+        <text class="node-title" x="76" y="134" font-size="14.5">Données historiques</text>
+        <text class="node-sub" x="76" y="153" font-size="11.5">Corpus public déjà collecté</text>
+
+        <rect class="box" x="60" y="210" width="260" height="90" rx="3"></rect>
+        <text class="mono tag" x="76" y="232" font-size="11">02</text>
+        <text class="node-title" x="76" y="254" font-size="14.5">Mock API</text>
+        <text class="node-sub" x="76" y="273" font-size="11">Simule un flux de production</text>
+        <text class="node-sub" x="76" y="288" font-size="11">(données synthétiques de texte)</text>
+
+        <!-- 03 · S3 — cylindre -->
+        <ellipse class="box-store" cx="520" cy="150" rx="130" ry="16"></ellipse>
+        <rect class="box-store" x="390" y="150" width="260" height="140"></rect>
+        <ellipse class="box-store" cx="520" cy="290" rx="130" ry="16"></ellipse>
+        <path d="M390,150 A130,16 0 0 0 650,150" fill="none" stroke="var(--good)" stroke-width="1.6"></path>
+        <text class="mono tag" x="520" y="182" font-size="11" text-anchor="middle">03</text>
+        <text class="node-title" x="520" y="203" font-size="14.5" text-anchor="middle">S3 (1 bucket)</text>
+        <text class="node-sub mono" x="520" y="222" font-size="10.5" text-anchor="middle">/data/ = brut, versionné</text>
+        <text class="node-sub mono" x="520" y="237" font-size="10.5" text-anchor="middle">/mlflow-artifacts/</text>
+        <text class="node-sub" x="520" y="253" font-size="10" text-anchor="middle" fill="var(--ink-dim)">IAM distincts par préfixe</text>
+        <text class="node-sub" x="520" y="268" font-size="9" text-anchor="middle" font-style="italic" fill="var(--ink-dim)">référence historique (figée, non retraitée)</text>
+
+        <rect class="box" x="800" y="110" width="300" height="190" rx="3"></rect>
+        <text class="mono tag" x="816" y="132" font-size="11">04</text>
+        <text class="node-title" x="816" y="154" font-size="14.5">Validation &amp; préparation</text>
+        <text class="node-sub" x="816" y="174" font-size="11">Dédup exacte + quasi-doublons,</text>
+        <text class="node-sub" x="816" y="190" font-size="11">labels manquants/aberrants,</text>
+        <text class="node-sub" x="816" y="206" font-size="11">conflits d'étiquetage, corpus vide</text>
+        <text class="node-sub" x="816" y="228" font-size="11">→ split train / val / test</text>
+
+        <!-- arrows lane 1 -->
+        <path class="flow-line" d="M320,135 L390,185" marker-end="url(#arrow-line)"></path>
+        <text class="mono flow-label" x="330" y="162" font-size="10.5">ingère</text>
+
+        <path class="loop-line" d="M320,250 L390,220" marker-end="url(#arrow-loop)"></path>
+        <text class="mono flow-label-strong" x="383" y="196" font-size="10" text-anchor="end">Alimente le train (03)</text>
+
+        <path class="flow-line" d="M650,215 L800,200" marker-end="url(#arrow-line)"></path>
+        <text class="mono flow-label" x="666" y="194" font-size="10.5">ingère</text>
+
+        <path class="flow-line" d="M950,300 L950,390" marker-end="url(#arrow-line)"></path>
+        <text class="mono flow-label" x="804" y="317" font-size="10.5">jeu d'entraînement validé</text>
+
+        <!-- ===== LANE 2 : ENTRAÎNEMENT & MLFLOW ===== -->
+        <rect class="box" x="800" y="390" width="260" height="100" rx="3"></rect>
+        <text class="mono tag" x="816" y="412" font-size="11">05</text>
+        <text class="node-title" x="816" y="434" font-size="14.5">Entraînement</text>
+        <text class="node-sub" x="816" y="454" font-size="11.5">Script Python (train.py)</text>
+
+        <rect class="box" x="1120" y="390" width="240" height="100" rx="3"></rect>
+        <text class="mono tag" x="1136" y="412" font-size="11">06</text>
+        <text class="node-title" x="1136" y="434" font-size="14.5">MLflow Tracking</text>
+        <text class="node-sub" x="1136" y="453" font-size="11">Params, métriques,</text>
+        <text class="node-sub" x="1136" y="468" font-size="11">artefacts</text>
+
+        <rect class="box" x="1420" y="390" width="280" height="100" rx="3"></rect>
+        <text class="mono tag" x="1436" y="412" font-size="11">07</text>
+        <text class="node-title" x="1436" y="434" font-size="14.5">MLflow Model Registry</text>
+        <text class="node-sub" x="1436" y="453" font-size="11">candidate → staging</text>
+        <text class="node-sub" x="1436" y="468" font-size="11">→ production</text>
+
+        <!-- 08 · Neon — cylindre -->
+        <ellipse class="box-store" cx="1560" cy="590" rx="120" ry="15"></ellipse>
+        <rect class="box-store" x="1440" y="590" width="240" height="100"></rect>
+        <ellipse class="box-store" cx="1560" cy="690" rx="120" ry="15"></ellipse>
+        <path d="M1440,590 A120,15 0 0 0 1680,590" fill="none" stroke="var(--good)" stroke-width="1.6"></path>
+        <text class="mono tag" x="1560" y="613" font-size="11" text-anchor="middle">08</text>
+        <text class="node-title" x="1560" y="634" font-size="14" text-anchor="middle">Neon</text>
+        <text class="node-sub" x="1560" y="651" font-size="10.5" text-anchor="middle">PostgreSQL managé —</text>
+        <text class="node-sub" x="1560" y="665" font-size="10.5" text-anchor="middle">métadonnées MLflow</text>
+
+        <!-- 09 · diamant -->
+        <polygon class="diamond" points="1860,390 1950,470 1860,550 1770,470"></polygon>
+        <text class="mono tag" x="1860" y="436" font-size="10" text-anchor="middle" fill="var(--accent)">09</text>
+        <text class="node-title" x="1860" y="460" font-size="12" text-anchor="middle">Porte de promotion</text>
+        <text class="node-sub" x="1860" y="481" font-size="9.5" text-anchor="middle">comparaison</text>
+        <text class="node-sub" x="1860" y="495" font-size="9.5" text-anchor="middle">auto vs. seuils</text>
+
+        <!-- Révision manuelle (optionnelle) -->
+        <rect class="box-optional" x="1810" y="610" width="220" height="100" rx="3"></rect>
+        <text class="node-title" x="1826" y="638" font-size="13">Révision</text>
+        <text class="node-title" x="1826" y="654" font-size="13">manuelle</text>
+        <text class="node-sub mono" x="1826" y="676" font-size="10" fill="var(--ink-dim)">(optionnelle)</text>
+
+        <!-- arrows lane 2 -->
+        <path class="flow-line" d="M1060,440 L1120,440" marker-end="url(#arrow-line)"></path>
+        <text class="mono flow-label" x="1090" y="380" font-size="9.5" text-anchor="middle">enregistre le run</text>
+
+        <path class="flow-line" d="M1360,440 L1420,440" marker-end="url(#arrow-line)"></path>
+        <text class="mono flow-label" x="1390" y="380" font-size="9.5" text-anchor="middle">enregistre le candidat</text>
+
+        <path class="loop-line" d="M1420,465 L1360,465" marker-end="url(#arrow-loop)"></path>
+        <text class="mono flow-label-strong" x="1390" y="480" font-size="9.5" text-anchor="middle">récupère les métriques du run production</text>
+
+        <path class="decision-line" d="M1700,412 L1770,455" marker-end="url(#arrow-loop)"></path>
+        <text class="mono flow-label-strong" x="1735" y="380" font-size="10" text-anchor="middle">comparaison</text>
+        <text class="mono flow-label-strong" x="1735" y="393" font-size="10" text-anchor="middle">automatique</text>
+
+        <path class="flow-line" d="M1860,550 L1700,478" marker-end="url(#arrow-line)"></path>
+        <text class="mono flow-label" x="1710" y="524" font-size="10.5">charge en production</text>
+
+        <path class="decision-line" d="M1878,550 L1900,610" marker-end="url(#arrow-loop)"></path>
+        <text class="mono flow-label-strong" x="1882" y="578" font-size="10.5">si rejeté → reste en staging</text>
+
+        <path class="flow-line-soft" d="M1560,490 L1560,590" marker-end="url(#arrow-soft)"></path>
+        <text class="mono flow-label" x="1570" y="543" font-size="10">métadonnées</text>
+        <text class="mono flow-label" x="1570" y="556" font-size="10">(runs, métriques)</text>
+
+        <!-- boucle de réentraînement -->
+        <path class="loop-line" d="M1860,390 L1860,362 L930,362 L930,390" marker-end="url(#arrow-loop)"></path>
+        <text class="mono flow-label-strong" x="1244" y="358" font-size="10.5">relance un cycle d'entraînement</text>
+
+        <path class="loop-line" d="M840,760 L840,715 L690,715 L690,440 L800,440" marker-end="url(#arrow-loop)"></path>
+        <text class="mono flow-label-strong" x="700" y="573" font-size="10.5">relance une boucle</text>
+        <text class="mono flow-label-strong" x="700" y="586" font-size="10.5">d'entraînement</text>
+
+        <!-- ===== LANE 3 : CI/CD ===== -->
+        <rect class="box-wide" x="800" y="760" width="1000" height="110" rx="3"></rect>
+        <text class="mono tag" x="816" y="782" font-size="11">10</text>
+        <text class="node-title" x="816" y="804" font-size="14.5">CI/CD — GitHub Actions</text>
+        <text class="node-sub mono" x="816" y="824" font-size="11">push / PR → ruff check → pytest → build → push vers Artifact Registry (GCP)</text>
+
+        <path class="loop-line" d="M1420,490 L1050,760" marker-end="url(#arrow-loop)"></path>
+        <text class="mono flow-label-strong" x="1134" y="704" font-size="10.5">interroge le 07 périodiquement (pull)</text>
+
+        <path class="loop-line" d="M1710,760 L1710,510 L1550,510 L1550,490" marker-end="url(#arrow-loop)"></path>
+        <text class="mono flow-label-strong" x="1720" y="610" font-size="10">recharge si version</text>
+        <text class="mono flow-label-strong" x="1720" y="623" font-size="10">différente</text>
+
+        <!-- ===== LANE 4 : DÉPLOIEMENT ===== -->
+        <rect class="box-gcp" x="800" y="890" width="500" height="165" rx="6"></rect>
+        <text class="mono" x="816" y="910" font-size="10.5" fill="var(--good)">GCP CLOUD RUN — SERVICES GÉRÉS</text>
+
+        <rect class="box" x="820" y="925" width="220" height="100" rx="3"></rect>
+        <text class="mono tag" x="836" y="947" font-size="11">11</text>
+        <text class="node-title" x="836" y="968" font-size="13.5">Orchestration</text>
+        <text class="node-sub" x="836" y="986" font-size="10.5">Cloud Run : remplace</text>
+        <text class="node-sub" x="836" y="1000" font-size="10.5">docker-compose</text>
+
+        <rect class="box" x="1070" y="905" width="210" height="140" rx="3"></rect>
+        <text class="mono tag" x="1086" y="927" font-size="11">12</text>
+        <text class="node-title" x="1086" y="949" font-size="14.5">FastAPI</text>
+        <text class="node-sub mono" x="1086" y="968" font-size="11">/health</text>
+        <text class="node-sub mono" x="1086" y="984" font-size="11">/model-info</text>
+        <text class="node-sub mono" x="1086" y="1000" font-size="11">/predict</text>
+
+        <rect class="box" x="1380" y="925" width="240" height="100" rx="3"></rect>
+        <text class="mono tag" x="1396" y="947" font-size="11">13</text>
+        <text class="node-title" x="1396" y="969" font-size="14.5">Streamlit</text>
+        <text class="node-sub" x="1396" y="988" font-size="11">Interface clinicien / sélecteur</text>
+
+        <rect class="box" x="1700" y="925" width="260" height="100" rx="3"></rect>
+        <text class="node-title" x="1716" y="951" font-size="13.5">Utilisateur</text>
+        <text class="node-sub" x="1716" y="969" font-size="11">Clinicien / sélecteur</text>
+        <text class="node-sub" x="1716" y="985" font-size="10" fill="var(--ink-dim)">saisit le texte à classer</text>
+
+        <!-- arrows lane 4 -->
+        <path class="flow-line" d="M1040,970 L1070,970" marker-end="url(#arrow-line)"></path>
+        <text class="mono flow-label" x="1044" y="965" font-size="10">sert</text>
+
+        <path class="flow-line" d="M1280,975 L1380,975" marker-end="url(#arrow-line)"></path>
+        <text class="mono flow-label" x="1294" y="1000" font-size="10.5">requête /predict</text>
+
+        <path class="flow-line" d="M1620,975 L1700,975" marker-start="url(#arrow-line)" marker-end="url(#arrow-line)"></path>
+        <text class="mono flow-label" x="1660" y="953" font-size="8" text-anchor="middle">saisit le texte</text>
+        <text class="mono flow-label" x="1660" y="964" font-size="8" text-anchor="middle">à classer</text>
+
+        <path class="loop-line" d="M150,300 L150,1060 L1070,1060 L1070,975" marker-end="url(#arrow-loop)"></path>
+        <text class="mono flow-label-strong" x="100" y="573" font-size="10.5">alimente</text>
+        <text class="mono flow-label-strong" x="100" y="586" font-size="10.5">/predict (12)</text>
+
+        <!-- ===== LANE 5 : MONITORING ===== -->
+        <rect class="box" x="800" y="1110" width="260" height="100" rx="3"></rect>
+        <text class="mono tag" x="816" y="1132" font-size="11">14</text>
+        <text class="node-title" x="816" y="1154" font-size="14.5">Logs structurés</text>
+        <text class="node-sub" x="816" y="1174" font-size="11">Jamais le texte brut</text>
+        <text class="node-sub" x="816" y="1188" font-size="11">du patient</text>
+
+        <rect class="box-job" x="1120" y="1110" width="280" height="100" rx="3"></rect>
+        <text class="mono tag" x="1136" y="1132" font-size="11">15</text>
+        <text class="node-title" x="1136" y="1154" font-size="14.5">Evidently</text>
+        <text class="node-sub mono" x="1136" y="1172" font-size="10">job planifié (CI) —</text>
+        <text class="node-sub mono" x="1136" y="1186" font-size="10">pas un conteneur permanent</text>
+
+        <rect class="box" x="1460" y="1110" width="290" height="100" rx="3"></rect>
+        <text class="mono tag" x="1476" y="1132" font-size="11">16</text>
+        <text class="node-title" x="1476" y="1154" font-size="14.5">Déclencheur</text>
+        <text class="node-sub" x="1476" y="1174" font-size="11">Dérive significative</text>
+        <text class="node-sub" x="1476" y="1188" font-size="11">détectée</text>
+
+        <path class="flow-line" d="M1175,1045 L930,1110" marker-end="url(#arrow-line)"></path>
+        <text class="mono flow-label" x="944" y="1090" font-size="10.5">enregistre le log (sans texte)</text>
+
+        <path class="flow-line" d="M1060,1160 L1120,1160" marker-end="url(#arrow-line)"></path>
+        <text class="mono flow-label" x="1090" y="1102" font-size="9.5" text-anchor="middle">lecture batch</text>
+
+        <path class="flow-line" d="M1400,1160 L1460,1160" marker-end="url(#arrow-line)"></path>
+        <text class="mono flow-label" x="1430" y="1102" font-size="9.5" text-anchor="middle">rapport de dérive</text>
+
+        <path class="loop-line" d="M1750,1110 L1985,1110 L1985,870 L1800,870" marker-end="url(#arrow-loop)"></path>
+        <text class="mono flow-label-strong" x="1992" y="965" font-size="9.5">dérive détectée →</text>
+        <text class="mono flow-label-strong" x="1992" y="978" font-size="9.5">relance le CI/CD</text>
+
+      </svg>

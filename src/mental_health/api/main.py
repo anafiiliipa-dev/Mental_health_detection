@@ -134,8 +134,18 @@ def _predict_with_transformers_model(pipeline, text: str) -> PredictResponse:
     yields its string keys). Passing ``top_k=None`` here every time is
     what actually determines the output shape, regardless of what MLflow
     preserved from registration.
+
+    ``truncation=True`` is passed for the same reason: the pipeline was
+    never built with a truncation setting (see ``register_distilbert.py``),
+    so a request text longer than the model's 512-token limit crashes with
+    a raw ``RuntimeError`` from inside PyTorch's position-embedding
+    addition instead of failing gracefully — first observed when the
+    monitoring job (``drift_check.py``) scored real, longer training
+    texts. Truncating to the model's max length is the standard way to
+    handle this in a triage tool, where cutting off the tail of an
+    overlong submission is an acceptable trade-off against a hard 500.
     """
-    scores = pipeline([text], top_k=None)[0]
+    scores = pipeline([text], top_k=None, truncation=True)[0]
     probabilities = {item["label"]: float(item["score"]) for item in scores}
     best = max(scores, key=lambda item: item["score"])
 

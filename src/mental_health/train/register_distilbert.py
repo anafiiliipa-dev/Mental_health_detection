@@ -15,18 +15,13 @@ done: log an MLflow run with the model + metrics, and alias it "staging".
 Actually deciding promotion is still a separate, explicit step —
 ``python -m mental_health.train.promote`` — unchanged by this script.
 
-IMPORTANT CAVEAT — read before running ``promote.py`` after this:
-if DistilBERT passes the promotion gate and becomes "production",
-``mental_health.api.model_loader.load_production_model`` will FAIL to
-serve it. That loader calls ``mlflow.sklearn.load_model``, which only
-knows how to deserialize scikit-learn estimators — not a Transformers
-text-classification pipeline. Registering DistilBERT here makes it
-comparable through the same governance gate; it does NOT make the API
-able to serve it. Serving it for real needs a follow-up change to
-``model_loader.py`` (load via ``mlflow.transformers``/pyfunc, and adapt
-whatever calls ``.predict``/``.predict_proba`` directly on raw text) —
-out of scope here, flagged so a real promotion doesn't get mistaken for a
-deployable one.
+NOTE (previously a caveat, now resolved): ``mental_health.api.model_loader``
+and ``mental_health.api.main`` are flavor-aware — they detect whether the
+"production"-aliased model is a scikit-learn pipeline or a Transformers
+pipeline (via ``mlflow.models.get_model_info(...).flavors``) and dispatch
+accordingly, so a DistilBERT candidate promoted here IS servable through
+the same ``/predict`` contract as a classical model, no further change
+needed.
 
 Requires the ``transformers`` extra (``pip install -e ".[transformers]"``)
 — ``torch``/``transformers`` are imported lazily, inside
@@ -125,8 +120,15 @@ def register_distilbert_candidate(
 
     tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
     model = AutoModelForSequenceClassification.from_pretrained(str(model_dir))
+    # top_k=None and truncation=True are both set here for a clean initial
+    # pipeline, but neither is guaranteed to survive the MLflow log/load
+    # round-trip -- every caller (main.py, drift_check.py) passes both
+    # explicitly again at call time. See main.py's
+    # _predict_with_transformers_model docstring for why (an untruncated
+    # text past the model's 512-token limit crashes PyTorch's position
+    # embeddings instead of failing gracefully).
     text_classification_pipeline = pipeline(
-        "text-classification", model=model, tokenizer=tokenizer, top_k=None
+        "text-classification", model=model, tokenizer=tokenizer, top_k=None, truncation=True
     )
 
     with mlflow.start_run(run_name="distilbert_finetuned_candidate"):
@@ -169,7 +171,7 @@ if __name__ == "__main__":
     registered_version = register_distilbert_candidate()
     logger.info(
         "Done. '%s' v%s is now aliased '%s'. Run `python -m mental_health.train.promote` "
-        "to decide whether it becomes 'production' (see this module's docstring first -- "
-        "the API cannot currently SERVE a promoted DistilBERT version).",
+        "to decide whether it becomes 'production' -- the API's model_loader/main.py are "
+        "flavor-aware, so a promoted DistilBERT version is servable through /predict.",
         MLFLOW_REGISTERED_MODEL_NAME, registered_version, STAGING_ALIAS,
     )
