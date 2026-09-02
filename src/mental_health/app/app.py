@@ -664,7 +664,7 @@ def render_predictions() -> None:
 
         selected_model = st.selectbox(
             "Sélectionner un modèle",
-            [MLFLOW_PRODUCTION_OPTION] + list(MODEL_CANDIDATES.keys()),
+            [MLFLOW_PRODUCTION_OPTION, *MODEL_CANDIDATES.keys()],
             index=0,
         )
 
