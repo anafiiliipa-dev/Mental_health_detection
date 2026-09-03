@@ -66,3 +66,5 @@ LICENSE     text eol=lf
 notebooks/* linguist-vendored=false
 docs/*      linguist-documentation
 faiss_index/* linguist-generated
+
+*.ipynb linguist-vendored=true
