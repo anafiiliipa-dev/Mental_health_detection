@@ -1,32 +1,17 @@
 name: Drift monitoring
 
-# Weekly drift check against the "production" model on the shared MLflow
-# backend. Samples a mock batch of "new" messages (mock_stream.py, held-out
-# test split) and compares it to the training reference set with Evidently.
-# Does NOT retrain or promote anything -- observe-and-report only. Opens/
-# updates a GitHub Issue when significant drift is detected (see the last
-# step). Automated retraining lives in its own workflow: retrain.yml.
-#
-# Decision with Ana: the scheduled run always passes --simulate-drift.
-# There is no live production traffic yet, so an honest holdout sample is
-# drawn from the exact same distribution as training and essentially
-# never trips Evidently's drift preset -- with a real sample this job
-# would silently do nothing, every week, and the detection -> alert ->
-# retrain loop could never actually be watched running end-to-end.
-# simulate_drift (mock_stream.sample_mock_batch) instead draws a
-# deliberately skewed batch every run, so a real alert fires weekly and
-# retrain.yml's already-unconditional weekly retrain can be watched
-# picking up a fresh model afterward. This is a deliberate choice for
-# demonstrating the pipeline, NOT a realistic traffic simulation --
-# revisit once there is real request-log traffic to sample from instead.
+# Verification hebdomadaire de derive par rapport au modele "production" sur
+# le backend MLflow partage. Ne reentraine ni ne promeut rien -- observation
+# et rapport uniquement. Ouvre/met a jour une issue GitHub si une derive
+# significative est detectee. Le reentrainement automatique est dans
+# retrain.yml.
 on:
   schedule:
-    # Every Monday at 06:00 UTC -- before the weekly retrain (07:00 UTC).
-    - cron: "0 6 * * 1"
+    - cron: "0 6 * * 1" # tous les lundis a 06h00 UTC, avant retrain.yml (07h00 UTC)
   workflow_dispatch:
     inputs:
       simulate_drift:
-        description: "Force a deliberately skewed (guaranteed-drift) sample instead of an honest holdout sample"
+        description: "Forcer un echantillon volontairement biaise (derive garantie) au lieu d'un echantillon honnete"
         type: boolean
         default: true
 
@@ -39,10 +24,6 @@ jobs:
       issues: write
 
     env:
-      # Shared MLflow backend (Neon Postgres + S3-compatible storage) --
-      # same neondb_owner credential used for training/publishing, per
-      # explicit decision (kept simple for now; can move to a dedicated
-      # read-only CI credential later without any code change).
       MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
       MLFLOW_ARTIFACT_ROOT: ${{ secrets.MLFLOW_ARTIFACT_ROOT }}
       MLFLOW_S3_ENDPOINT_URL: ${{ secrets.MLFLOW_S3_ENDPOINT_URL }}
@@ -58,7 +39,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - run: pip install -e ".[api,mlflow,monitoring]"
+      - run: pip install -e ".[api,mlflow,monitoring]" lightgbm
 
       - name: Run drift check
         id: drift
@@ -88,16 +69,16 @@ jobs:
         run: |
           set -e
           EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --label drift-alert --state open --json number --jq '.[0].number // empty')
-          BODY="Le job de monitoring hebdomadaire (\`drift_monitoring.yml\`) a détecté une dérive significative : **${N_DRIFTED} colonne(s)** en dérive.
+          BODY="Le job de monitoring hebdomadaire (\`drift_monitoring.yml\`) a detecte une derive significative : **${N_DRIFTED} colonne(s)** en derive.
 
           Rapport Evidently complet en artifact du run : ${RUN_URL}
 
-          Ceci est un rapport, pas une action automatique -- aucun réentraînement n'est déclenché directement par cette alerte (le réentraînement hebdomadaire de \`retrain.yml\` tourne de toute façon, indépendamment). Voir \`recap_journee.md\` / la roadmap pour la suite."
+          Ceci est un rapport, pas une action automatique -- aucun reentrainement n'est declenche directement par cette alerte (le reentrainement hebdomadaire de \`retrain.yml\` tourne de toute facon, independamment)."
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY"
           else
             gh issue create --repo "$GITHUB_REPOSITORY" \
-              --title "Drift detected -- $(date -u +%Y-%m-%d)" \
+              --title "Derive detectee -- $(date -u +%Y-%m-%d)" \
               --label "drift-alert" \
               --body "$BODY"
           fi
