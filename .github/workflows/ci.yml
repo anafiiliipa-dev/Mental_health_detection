@@ -17,20 +17,19 @@ jobs:
     - run: pytest -v
     - run: docker build -t mental-health-api .
 
-    # Publishes to GCP Artifact Registry (the Cloud Run deployment target,
-    # docs/architecture.md), not GHCR — replaces the previous GHCR push.
-    # Requires three repo VARIABLES (Settings > Secrets and variables >
-    # Actions > Variables — not secret, just config) and one repo SECRET:
-    #   GCP_PROJECT_ID  — the GCP project Aamir created for Cloud Run
-    #   GCP_REGION      — e.g. europe-west1 (must match the Artifact
-    #                      Registry repo's region and the Cloud Run
-    #                      service's region)
-    #   GCP_AR_REPO     — the Artifact Registry repository name (created
-    #                      once via `gcloud artifacts repositories create`,
-    #                      see docs/deployment.md)
-    #   GCP_SA_KEY (secret) — JSON key for a service account with the
-    #                      "Artifact Registry Writer" role on that repo,
-    #                      pasted whole as the secret value
+    # Publie sur GCP Artifact Registry (la cible de déploiement Cloud Run,
+    # voir docs/architecture.md), plus sur GHCR — remplace l'ancien push GHCR.
+    # Nécessite trois VARIABLES du repo (Settings > Secrets and variables >
+    # Actions > Variables — pas secret, juste de la config) et un SECRET :
+    #   GCP_PROJECT_ID  — le projet GCP créé par Aamir pour Cloud Run
+    #   GCP_REGION      — ex. europe-west1 (doit correspondre à la région
+    #                      du dépôt Artifact Registry et du service Cloud Run)
+    #   GCP_AR_REPO     — le nom du dépôt Artifact Registry (créé une fois
+    #                      via `gcloud artifacts repositories create`,
+    #                      voir docs/deployment.md)
+    #   GCP_SA_KEY (secret) — clé JSON d'un compte de service avec le rôle
+    #                      "Artifact Registry Writer" sur ce dépôt, collée
+    #                      entièrement comme valeur du secret
     - name: Authenticate to GCP (main only)
       if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.GCP_PROJECT_ID != ''
       uses: google-github-actions/auth@v2
@@ -51,18 +50,25 @@ jobs:
         docker push "$IMAGE:latest"
         docker push "$IMAGE:${{ github.sha }}"
 
-    # Deploys the image just pushed above to Cloud Run, so the API is
-    # reachable at a public HTTPS URL instead of only on localhost. Needs
-    # the SAME three repo variables + GCP_SA_KEY secret as the push step
-    # above (the service account also needs the "Cloud Run Admin" role, not
-    # just "Artifact Registry Writer" -- ask Aamir to grant it if this step
-    # fails with a permission error), PLUS the MLflow/S3 secrets that were
-    # already added for drift_monitoring.yml / retrain.yml (MLFLOW_TRACKING_URI,
+    # Déploie l'image qui vient d'être publiée ci-dessus sur Cloud Run, pour
+    # que l'API soit accessible via une URL HTTPS publique et pas seulement
+    # en local. Nécessite les MÊMES trois variables du repo + le secret
+    # GCP_SA_KEY que l'étape de push ci-dessus (le compte de service a aussi
+    # besoin du rôle "Cloud Run Admin", pas seulement "Artifact Registry
+    # Writer" — demander à Aamir de l'ajouter si cette étape échoue avec une
+    # erreur de permission), PLUS les secrets MLflow/S3 (MLFLOW_TRACKING_URI,
     # MLFLOW_ARTIFACT_ROOT, MLFLOW_S3_ENDPOINT_URL, AWS_ENDPOINT_URL_S3,
-    # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION) -- the container
-    # never bakes these in (see the Dockerfile comment), it reads them from
-    # the environment at startup, exactly like running it locally with a
-    # .env file.
+    # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION) — le conteneur ne
+    # les intègre jamais dans l'image (voir le commentaire du Dockerfile), il
+    # les lit depuis l'environnement au démarrage, exactement comme en local
+    # avec un fichier .env.
+    #
+    # --cpu 2 --cpu-boost : par défaut, Cloud Run restreint le CPU pendant le
+    # démarrage du conteneur (il ne libère le CPU complet qu'une fois que le
+    # service répond aux requêtes). Comme l'image installe torch/transformers
+    # (voir le commentaire du Dockerfile), l'import de ces librairies au
+    # démarrage peut dépasser le délai imparti sans ce boost — c'est ce qui
+    # provoquait l'erreur "container failed to start and listen on the port".
     - name: Deploy to Cloud Run (main only)
       if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.GCP_PROJECT_ID != ''
       run: |
@@ -74,6 +80,8 @@ jobs:
           --allow-unauthenticated \
           --port 8000 \
           --memory 2Gi \
+          --cpu 2 \
+          --cpu-boost \
           --set-env-vars "MLFLOW_TRACKING_URI=${{ secrets.MLFLOW_TRACKING_URI }}" \
           --set-env-vars "MLFLOW_ARTIFACT_ROOT=${{ secrets.MLFLOW_ARTIFACT_ROOT }}" \
           --set-env-vars "MLFLOW_S3_ENDPOINT_URL=${{ secrets.MLFLOW_S3_ENDPOINT_URL }}" \
